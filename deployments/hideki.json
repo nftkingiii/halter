@@ -1,0 +1,150 @@
+{
+  "chainId": 50383,
+  "txs": [
+    {
+      "label": "deploy Halter",
+      "hash": "0x9c3b369543d6b37ee5aadba24eb9af61dda8f161b81514bbd21c477cd32f0134",
+      "block": 29099189,
+      "from": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B"
+    },
+    {
+      "label": "approve USDso to MarginBank",
+      "hash": "0x4333c7f45b2519f165db58eb2dcffaea82420166cb3043918596393ec1f20930",
+      "block": 29099238,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "deposit 100 USDso margin",
+      "hash": "0x5e3849a356228fc546c137ba0d207cf68016742088a3faf6ec43719f9e3e7890",
+      "block": 29099250,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "link Halter as operator",
+      "hash": "0x961ed73b6fef1a77d5c5ce3791dc3d37eebc184d9e83359875234d6c93f06806",
+      "block": 29099262,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "allow BTC, cap $60",
+      "hash": "0xcd65694aedbfaac76c2a7b43ec331511a113ff21c33fb12be40b7abc0439c89b",
+      "block": 29099274,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "allow ETH, cap $60",
+      "hash": "0xd0dbf1f29bf4b754904f6c1eacb80502fb43a78cba2457f4b52d6252179423e0",
+      "block": 29099287,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "set mandate (2x, $25/day, 30d)",
+      "hash": "0x2d7b9c898acc0599724be9b7d5dc5812a1acc3353c00b67597c4d3ccc83f8554",
+      "block": 29099299,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "allow agent key",
+      "hash": "0x71b6cfb7af7f2f9fbbf69e051500717d1d369a8c3834c656c0598b9ef6af820c",
+      "block": 29099311,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    }
+  ],
+  "halter": "0x24bd6b71f27c7aad65fb9842c6181b65b571a833",
+  "owner": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580",
+  "agent": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B",
+  "deployTx": "0x9c3b369543d6b37ee5aadba24eb9af61dda8f161b81514bbd21c477cd32f0134",
+  "deployBlock": 29099189,
+  "proofs": [
+    {
+      "label": "1 allowed: BTC bid inside mandate",
+      "expect": "OrderAllowed",
+      "outcome": "OrderAllowed(#6548594146166897502500)",
+      "pass": true,
+      "hash": "0x5679d26e0eb0c73a78d5671bd27333b2f7a3e3fb742bc972e433ec8852ff56be",
+      "block": 29099630,
+      "from": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B"
+    },
+    {
+      "label": "2 blocked: BTC ~$100 over $60 cap",
+      "expect": "OrderBlocked(NotionalCap)",
+      "outcome": "OrderBlocked(NotionalCap)",
+      "pass": true,
+      "hash": "0x58b8f5a1d2f9fbca57671423f1bffaca3445490de3e664aaccc338b72c4f6e7a",
+      "block": 29099651,
+      "from": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B"
+    },
+    {
+      "label": "3 blocked: SOL not in mandate",
+      "expect": "OrderBlocked(PoolNotAllowed)",
+      "outcome": "OrderBlocked(PoolNotAllowed)",
+      "pass": true,
+      "hash": "0xfd4b40112b1e84f9ccfeddabe8cfd4466a0486747c8eacda5a7475c90ec12148",
+      "block": 29099668,
+      "from": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B"
+    },
+    {
+      "label": "4 pair: BTC + ETH in one tx",
+      "expect": "PairPlaced",
+      "outcome": "OrderAllowed(#17007898035960213268790), OrderAllowed(#5368002525449486790895), PairPlaced",
+      "pass": true,
+      "hash": "0xe305ca13b0a7ad922f00caeb5e810bc22cb5c2154faecb4e0956da047c1c3e28",
+      "block": 29099689,
+      "from": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B"
+    },
+    {
+      "label": "   cancel #6548594146166897502500",
+      "expect": "",
+      "outcome": "",
+      "pass": true,
+      "hash": "0x8a31fb6b5f949a414b72cdca871b849b3e08d62654fcab006583457c9b313b22",
+      "block": 29099701,
+      "from": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B"
+    },
+    {
+      "label": "   cancel #17007898035960213268790",
+      "expect": "",
+      "outcome": "",
+      "pass": true,
+      "hash": "0xeb0c7f88a6b6763ec15b317c1efa4c639695c93e7a0a1c97cd8b47846731fb6b",
+      "block": 29099714,
+      "from": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B"
+    },
+    {
+      "label": "   cancel #5368002525449486790895",
+      "expect": "",
+      "outcome": "",
+      "pass": true,
+      "hash": "0x0eb2f3909bdd5af13a26787cba96640a1afd22368a9154c7d03c67125c2ba549",
+      "block": 29099726,
+      "from": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B"
+    },
+    {
+      "label": "5 owner revokes every agent",
+      "expect": "Revoked",
+      "outcome": "Revoked",
+      "pass": true,
+      "hash": "0x180ddd0bf051b6d1c3040735db9b9bb2f2beae5ad730ae59e03cdb75b5d9e8bb",
+      "block": 29099738,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "6 blocked: agent after revoke",
+      "expect": "OrderBlocked(Revoked)",
+      "outcome": "OrderBlocked(Revoked)",
+      "pass": true,
+      "hash": "0xbfefa4402d76f6430e600624fc9f9f05e98da69b623c12edb63ff3b780416578",
+      "block": 29099755,
+      "from": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B"
+    },
+    {
+      "label": "   owner restores mandate",
+      "expect": "MandateSet",
+      "outcome": "MandateSet",
+      "pass": true,
+      "hash": "0x7b370738260f0334f3c168ef4000165313d4a3232eaa0d6a5f0a79fd53a313ee",
+      "block": 29099769,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    }
+  ]
+}
