@@ -41,7 +41,7 @@ contract HalterForkTest is Test {
         IBankDeposit(address(BANK)).deposit(1_000e18);
         vm.stopPrank();
 
-        halter = new Halter(owner, FACTORY, BANK);
+        halter = new Halter(owner, address(0), FACTORY, BANK);
         bytes4[] memory sel = new bytes4[](3);
         sel[0] = 0x80054449; // placeOrderFor
         sel[1] = 0xe37b444b; // cancelOrderFor
@@ -241,6 +241,56 @@ contract HalterForkTest is Test {
         emit Halter.GuardChecked(0, 0);
         vm.prank(PRECOMPILE);
         halter.onEvent(PRECOMPILE, topics, "");
+    }
+
+    // ---------------------------------------------------------------- admin-managed account
+
+    /// An account that can only sign inside the dreamDEX app: it links Halter (here, the
+    /// operator grant) and a separate admin manages the paddock.
+    function _adminManaged() internal returns (Halter h, address account, address adminKey) {
+        account = makeAddr("app-wallet");
+        adminKey = makeAddr("admin");
+        deal(USDSO, account, 500e18);
+        vm.startPrank(account);
+        IERC20(USDSO).approve(address(BANK), type(uint256).max);
+        IBankDeposit(address(BANK)).deposit(500e18);
+        vm.stopPrank();
+        h = new Halter(account, adminKey, FACTORY, BANK);
+        bytes4[] memory sel = new bytes4[](3);
+        sel[0] = 0x80054449; sel[1] = 0xe37b444b; sel[2] = 0x364c2587;
+        vm.prank(account);
+        REGISTRY.setOperatorApprovalGlobal(address(h), sel, true);
+    }
+
+    function test_adminSetsPaddockAndAgentTradesForAccount() public {
+        (Halter h, address account, address adminKey) = _adminManaged();
+        vm.startPrank(adminKey);
+        h.setPool(BTC, 200e18);
+        h.setMandate(Halter.Mandate({expiresAt: uint64(block.timestamp + 7 days), maxLeverageX100: 300, dailyLossCap: 50e18, guardHealthBps: 15000, guardReduceBps: 5000, guardSlippageBps: 100}));
+        h.setAgent(agent, true);
+        vm.stopPrank();
+        Halter.Order memory o = _restingBid(BTC, _minQty(BTC));
+        vm.prank(agent);
+        (bool placed, uint128 id) = h.place(o);
+        assertTrue(placed, "placed for the account");
+        assertGt(id, 0);
+        assertEq(h.owner(), account);
+    }
+
+    function test_strangerCannotManagePaddock() public {
+        (Halter h,,) = _adminManaged();
+        vm.prank(stranger);
+        vm.expectRevert(Halter.NotOwner.selector);
+        h.setPool(BTC, 200e18);
+    }
+
+    function test_accountCanRemoveAdmin() public {
+        (Halter h, address account, address adminKey) = _adminManaged();
+        vm.prank(account);
+        h.setAdmin(address(0));
+        vm.prank(adminKey);
+        vm.expectRevert(Halter.NotOwner.selector);
+        h.setAgent(agent, true);
     }
 
     function _mark(address pool) internal view returns (uint256 m) {

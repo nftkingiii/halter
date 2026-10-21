@@ -9,6 +9,10 @@ import {
 } from "./lib.mjs";
 
 const dep = loadDeployment();
+// The account Halter trades for. Default: the test key's own account. With ACCOUNT=0x...
+// (an app wallet that links Halter in dreamDEX), the test key becomes the admin.
+const account = dep.owner ?? process.env.ACCOUNT ?? owner.address;
+const managed = account.toLowerCase() !== owner.address.toLowerCase();
 const mode = process.argv[2] ?? "status";
 const art = halterArtifact();
 const halterAbi = art.abi;
@@ -16,13 +20,14 @@ const halterAbi = art.abi;
 async function status() {
   const stt = async (a) => formatEther(await pub.getBalance({ address: a }));
   const usd = formatEther(await pub.readContract({ address: ADDR.usdso, abi: erc20Abi, functionName: "balanceOf", args: [owner.address] }));
-  const eq = formatEther(await pub.readContract({ address: ADDR.marginBank, abi: bankAbi, functionName: "getAccountEquity", args: [owner.address] }));
-  console.log(`owner ${owner.address}  STT ${await stt(owner.address)}  wallet USDso ${usd}  perps equity ${eq}`);
+  const eq = formatEther(await pub.readContract({ address: ADDR.marginBank, abi: bankAbi, functionName: "getAccountEquity", args: [account] }));
+  console.log(`account ${account}  perps equity ${eq}${managed ? "  (app wallet, links Halter in dreamDEX)" : `  wallet USDso ${usd}`}`);
+  console.log(`${managed ? "admin" : "owner"} key ${owner.address}  STT ${await stt(owner.address)}`);
   console.log(`agent ${agent.address}  STT ${await stt(agent.address)}`);
   if (!dep.halter) return console.log("halter: not deployed");
   console.log(`halter ${dep.halter}`);
   for (const [sym, pool] of Object.entries(POOLS)) {
-    const linked = await pub.readContract({ address: pool, abi: poolAbi, functionName: "isOperatorAuthorized", args: [owner.address, dep.halter, SEL.placeOrderFor] });
+    const linked = await pub.readContract({ address: pool, abi: poolAbi, functionName: "isOperatorAuthorized", args: [account, dep.halter, SEL.placeOrderFor] });
     const cap = await pub.readContract({ address: dep.halter, abi: halterAbi, functionName: "poolNotionalCap", args: [pool] });
     console.log(`  ${sym.padEnd(4)} linked=${linked}  cap=$${formatEther(cap)}`);
   }
@@ -38,11 +43,11 @@ if (mode === "deploy") {
   const hash = await wallet(agent).deployContract({
     abi: halterAbi,
     bytecode: art.bytecode.object,
-    args: [owner.address, ADDR.factory, ADDR.marginBank],
+    args: [account, managed ? owner.address : "0x0000000000000000000000000000000000000000", ADDR.factory, ADDR.marginBank],
   });
   const r = await pub.waitForTransactionReceipt({ hash });
   if (r.status !== "success") throw new Error(`deploy reverted: ${hash}`);
-  Object.assign(dep, { halter: r.contractAddress, owner: owner.address, agent: agent.address, deployTx: hash, deployBlock: Number(r.blockNumber) });
+  Object.assign(dep, { halter: r.contractAddress, owner: account, admin: managed ? owner.address : null, agent: agent.address, deployTx: hash, deployBlock: Number(r.blockNumber) });
   dep.txs.push({ label: "deploy Halter", hash, block: Number(r.blockNumber), from: agent.address });
   saveDeployment(dep);
   console.log(`  ok  deploy Halter at ${r.contractAddress}  ${hash}`);
@@ -51,20 +56,21 @@ if (mode === "deploy") {
 if (mode === "setup") {
   if (!dep.halter) throw new Error("deploy first");
   const H = dep.halter;
-  const margin = await pub.readContract({ address: ADDR.usdso, abi: erc20Abi, functionName: "balanceOf", args: [owner.address] });
+  const margin = managed ? 0n : await pub.readContract({ address: ADDR.usdso, abi: erc20Abi, functionName: "balanceOf", args: [owner.address] });
+  if (managed) console.log("  --  app wallet: deposit and Link a Bot happen in the dreamDEX app, not here");
   if (margin > 0n) {
     const allowance = await pub.readContract({ address: ADDR.usdso, abi: erc20Abi, functionName: "allowance", args: [owner.address, ADDR.marginBank] });
     if (allowance < margin) await send(dep, "approve USDso to MarginBank", owner, { address: ADDR.usdso, abi: erc20Abi, functionName: "approve", args: [ADDR.marginBank, margin] });
     await send(dep, `deposit ${formatEther(margin)} USDso margin`, owner, { address: ADDR.marginBank, abi: bankAbi, functionName: "deposit", args: [margin] });
   }
   // An earlier Halter linked to this account keeps no power once v2 takes over.
-  if (dep.previous && dep.previous !== H) {
+  if (!managed && dep.previous && dep.previous !== H) {
     await send(dep, `unlink previous Halter ${dep.previous.slice(0, 10)}`, owner, {
       address: ADDR.registry, abi: registryAbi, functionName: "setOperatorApprovalGlobal",
       args: [dep.previous, [SEL.placeOrderFor, SEL.cancelOrderFor, SEL.reduceOrderFor], false],
     });
   }
-  await send(dep, "link Halter as operator", owner, {
+  if (!managed) await send(dep, "link Halter as operator", owner, {
     address: ADDR.registry, abi: registryAbi, functionName: "setOperatorApprovalGlobal",
     args: [H, [SEL.placeOrderFor, SEL.cancelOrderFor, SEL.reduceOrderFor], true],
   });

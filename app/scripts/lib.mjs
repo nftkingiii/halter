@@ -65,7 +65,9 @@ export const poolAbi = parseAbi([
 ]);
 
 // ---- deployment record (public: addresses and tx hashes only) ----
-const depFile = new URL(process.env.RPC_OVERRIDE ? "deployments/dryrun.json" : "deployments/hideki.json", root);
+// DEPLOY=arena -> deployments/hideki-arena.json (Halter for an app wallet, managed by the admin key)
+const depName = process.env.RPC_OVERRIDE ? "dryrun" : process.env.DEPLOY ? `hideki-${process.env.DEPLOY.replace(/[^\w-]/g, "")}` : "hideki";
+const depFile = new URL(`deployments/${depName}.json`, root);
 export function loadDeployment() {
   return existsSync(depFile) ? JSON.parse(readFileSync(depFile, "utf8")) : { chainId: 50383, txs: [] };
 }

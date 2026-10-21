@@ -20,6 +20,7 @@ const REASONS = ["None", "Revoked", "Expired", "NotAgent", "PoolNotAllowed", "No
 const dep = loadDeployment();
 if (!dep.halter) throw new Error("no Halter deployment in deployments/hideki.json");
 const H = dep.halter;
+const ACCOUNT = dep.owner ?? owner.address; // the dreamDEX account this Halter trades for
 const halterAbi = halterArtifact().abi;
 const client = env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }) : null;
 
@@ -72,7 +73,7 @@ async function readPaddock() {
   const [revoked, count, [equity, imReq, mmReq]] = await Promise.all([
     pub.readContract({ address: H, abi: halterAbi, functionName: "revoked" }),
     pub.readContract({ address: H, abi: halterAbi, functionName: "allowedPoolCount" }),
-    pub.readContract({ address: ADDR.marginBank, abi: bankAbi, functionName: "getAccountHealth", args: [owner.address] }),
+    pub.readContract({ address: ADDR.marginBank, abi: bankAbi, functionName: "getAccountHealth", args: [ACCOUNT] }),
   ]);
   const bySym = Object.fromEntries(Object.entries(await markets()).map(([s, p]) => [p.toLowerCase(), s]));
   const allowed = [];
@@ -80,7 +81,7 @@ async function readPaddock() {
     const pool = await pub.readContract({ address: H, abi: halterAbi, functionName: "allowedPools", args: [i] });
     const cap = await pub.readContract({ address: H, abi: halterAbi, functionName: "poolNotionalCap", args: [pool] });
     if (cap === 0n) continue;
-    const pos = await pub.readContract({ address: ADDR.marginBank, abi: posAbi, functionName: "getPosition", args: [owner.address, pool] });
+    const pos = await pub.readContract({ address: ADDR.marginBank, abi: posAbi, functionName: "getPosition", args: [ACCOUNT, pool] });
     const info = await marketInfo(bySym[pool.toLowerCase()]);
     const size = BigInt(pos.size);
     const notional = info.ok ? ((size < 0n ? -size : size) * info.mark) / info.oneBase : 0n;
@@ -171,7 +172,7 @@ async function sendOrder(sym, order, oneBase, input, log) {
 async function closePosition({ market }, log) {
   const sym = String(market).toUpperCase();
   const i = await marketInfo(sym);
-  const pos = await pub.readContract({ address: ADDR.marginBank, abi: posAbi, functionName: "getPosition", args: [owner.address, i.pool] });
+  const pos = await pub.readContract({ address: ADDR.marginBank, abi: posAbi, functionName: "getPosition", args: [ACCOUNT, i.pool] });
   const size = BigInt(pos.size);
   if (size === 0n) return { result: "no position to close" };
   if (!i.ok) throw new Error(`${sym} mark price is stale; try later`);

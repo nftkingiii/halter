@@ -47,7 +47,12 @@ contract Halter is SomniaEventHandler {
 
     // ---------------------------------------------------------------- state
 
+    /// The dreamDEX account Halter trades for. It links Halter in the app (Link a Bot)
+    /// and can always manage the paddock itself.
     address public immutable owner;
+    /// Optional second manager, for accounts whose wallet can't sign outside the
+    /// dreamDEX app. The account or the admin can replace or clear it.
+    address public admin;
     IPerpPoolFactory public immutable factory;
     IMarginBank public immutable marginBank;
 
@@ -79,20 +84,22 @@ contract Halter is SomniaEventHandler {
     // ---------------------------------------------------------------- errors
 
     error NotOwner();
+    event AdminSet(address indexed admin);
     error OrderRejected(Reason reason);
     error PlacementFailed(address pool);
     error GuardNotTriggered();
 
     uint8 private constant IOC = 2;
 
-    constructor(address owner_, IPerpPoolFactory factory_, IMarginBank marginBank_) {
+    constructor(address owner_, address admin_, IPerpPoolFactory factory_, IMarginBank marginBank_) {
         owner = owner_;
+        admin = admin_;
         factory = factory_;
         marginBank = marginBank_;
     }
 
     modifier onlyOwner() {
-        if (msg.sender != owner) revert NotOwner();
+        if (msg.sender != owner && (admin == address(0) || msg.sender != admin)) revert NotOwner();
         _;
     }
 
@@ -119,6 +126,11 @@ contract Halter is SomniaEventHandler {
     }
 
     /// @notice One tap: every agent stops at once. Reducing orders still pass through the guard.
+    function setAdmin(address admin_) external onlyOwner {
+        admin = admin_;
+        emit AdminSet(admin_);
+    }
+
     function revoke() external onlyOwner {
         revoked = true;
         emit Revoked(msg.sender);
@@ -158,7 +170,8 @@ contract Halter is SomniaEventHandler {
     }
 
     function cancel(address pool, uint128 orderId) external {
-        if (!(isAgent[msg.sender] && !revoked) && msg.sender != owner) revert OrderRejected(Reason.NotAgent);
+        bool manager = msg.sender == owner || (admin != address(0) && msg.sender == admin);
+        if (!(isAgent[msg.sender] && !revoked) && !manager) revert OrderRejected(Reason.NotAgent);
         IPerpPool(pool).cancelOrderFor(owner, orderId);
     }
 
