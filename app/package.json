@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.133.0",
     "@somnia-chain/markets-sdk": "0.32.1",
     "viem": "^2.57.7"
   },
