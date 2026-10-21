@@ -2,6 +2,7 @@
 //   node tools/fund-testnet.mjs bridge   -> 45 STT Shannon -> Hideki (owner to owner)
 //   node tools/fund-testnet.mjs agent    -> 5 STT on Hideki (owner -> agent)
 //   node tools/fund-testnet.mjs status   -> balances only, sends nothing
+//   node tools/fund-testnet.mjs gas 0xADDR 2 -> up to 5 STT of Hideki gas to one address (never USDso)
 import { readFileSync } from "node:fs";
 import { createPublicClient, createWalletClient, http, parseEther, pad, defineChain, formatEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -48,5 +49,15 @@ if (mode === "bridge") {
   const hash = await createWalletClient({ account: owner, chain: hideki, transport: http() }).sendTransaction({ to: agent, value: parseEther("5") });
   const r = await pubH.waitForTransactionReceipt({ hash });
   console.log(`agent funding tx ${hash} status ${r.status} block ${r.blockNumber}`);
+} else if (mode === "gas") {
+  const [to, amt] = process.argv.slice(3);
+  if (!/^0x[0-9a-fA-F]{40}$/.test(to ?? "")) throw new Error("usage: gas 0xADDRESS AMOUNT");
+  const amount = Number(amt ?? 2);
+  if (!(amount > 0 && amount <= 5)) throw new Error("amount must be between 0 and 5 STT");
+  const before = formatEther(await pubH.getBalance({ address: to }));
+  const hash = await createWalletClient({ account: owner, chain: hideki, transport: http() }).sendTransaction({ to, value: parseEther(String(amount)) });
+  const r = await pubH.waitForTransactionReceipt({ hash });
+  console.log(`gas tx ${hash} status ${r.status} block ${r.blockNumber}`);
+  console.log(`${to} Hideki STT ${before} -> ${formatEther(await pubH.getBalance({ address: to }))}`);
 }
 if (mode !== "status") await status();
