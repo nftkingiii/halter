@@ -11,6 +11,8 @@ import { createPublicClient, http as viemHttp, decodeEventLog } from "viem";
 const here = fileURLToPath(new URL(".", import.meta.url));
 const RPC = process.env.RPC_URL ?? "https://api.hideki2.infra.testnet.somnia.network";
 const PORT = Number(process.env.PORT ?? 8787);
+// Local runs stay on this machine; a host like Railway sets HOST=0.0.0.0.
+const HOST = process.env.HOST ?? "127.0.0.1";
 const DATA = process.env.DATA_DIR ?? join(here, "data");
 const DIST = join(here, "..", "dist");
 const STEP = 1000n; // node limit
@@ -105,6 +107,6 @@ http.createServer((req, res) => {
   if (!existsSync(p)) { res.writeHead(404); return res.end("build the app first: npm run build"); }
   res.writeHead(200, { "content-type": types[extname(p)] ?? "application/octet-stream" });
   res.end(readFileSync(p));
-}).listen(PORT, () => console.log(`halter service on :${PORT}, rpc ${RPC}`));
+}).listen(PORT, HOST, () => console.log(`halter service on ${HOST}:${PORT}, rpc ${RPC}`));
 
 loop();
