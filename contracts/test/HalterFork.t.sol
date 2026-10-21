@@ -41,7 +41,7 @@ contract HalterForkTest is Test {
         IBankDeposit(address(BANK)).deposit(1_000e18);
         vm.stopPrank();
 
-        halter = new Halter(owner, address(0), FACTORY, BANK);
+        halter = new Halter(owner, address(0), address(0), FACTORY, BANK);
         bytes4[] memory sel = new bytes4[](3);
         sel[0] = 0x80054449; // placeOrderFor
         sel[1] = 0xe37b444b; // cancelOrderFor
@@ -255,7 +255,7 @@ contract HalterForkTest is Test {
         IERC20(USDSO).approve(address(BANK), type(uint256).max);
         IBankDeposit(address(BANK)).deposit(500e18);
         vm.stopPrank();
-        h = new Halter(account, adminKey, FACTORY, BANK);
+        h = new Halter(account, adminKey, address(0), FACTORY, BANK);
         bytes4[] memory sel = new bytes4[](3);
         sel[0] = 0x80054449; sel[1] = 0xe37b444b; sel[2] = 0x364c2587;
         vm.prank(account);
@@ -291,6 +291,76 @@ contract HalterForkTest is Test {
         vm.prank(adminKey);
         vm.expectRevert(Halter.NotOwner.selector);
         h.setAgent(agent, true);
+    }
+
+    // ---------------------------------------------------------------- keyless operator (EIP-7702)
+
+    /// The app only links addresses without code. A keyless address is linked first, then
+    /// gets Halter's code through EIP-7702 and is initialised in the same step. (Foundry needs
+    /// a key to sign the delegation; on chain the authority comes from a signature nobody
+    /// holds a key for, and the code path is the same.)
+    function _keyless() internal returns (Halter h, address account, address authority, address initKey, address adminKey) {
+        account = makeAddr("app-wallet-7702");
+        initKey = makeAddr("initializer");
+        adminKey = makeAddr("admin-7702");
+        uint256 pk;
+        (authority, pk) = makeAddrAndKey("keyless");
+        deal(USDSO, account, 500e18);
+        vm.startPrank(account);
+        IERC20(USDSO).approve(address(BANK), type(uint256).max);
+        IBankDeposit(address(BANK)).deposit(500e18);
+        // 1. the account links the address while it still has no code (what Link a Bot accepts)
+        assertEq(authority.code.length, 0, "linked while codeless");
+        bytes4[] memory sel = new bytes4[](3);
+        sel[0] = 0x80054449; sel[1] = 0xe37b444b; sel[2] = 0x364c2587;
+        REGISTRY.setOperatorApprovalGlobal(authority, sel, true);
+        vm.stopPrank();
+        // 2. install Halter's code on it and initialise it in one call
+        Halter impl = new Halter(account, address(0), initKey, FACTORY, BANK);
+        vm.signAndAttachDelegation(address(impl), pk);
+        vm.prank(initKey);
+        Halter(authority).initialize(adminKey);
+        h = Halter(authority);
+    }
+
+    function test_keylessOperatorTradesForAccountInsidePaddock() public {
+        (Halter h, address account, address authority,, address adminKey) = _keyless();
+        assertEq(bytes3(authority.code), bytes3(0xef0100), "delegation installed");
+        assertEq(h.owner(), account);
+        assertEq(h.admin(), adminKey);
+        vm.startPrank(adminKey);
+        h.setPool(BTC, 200e18);
+        h.setMandate(Halter.Mandate({expiresAt: uint64(block.timestamp + 7 days), maxLeverageX100: 300, dailyLossCap: 50e18, guardHealthBps: 15000, guardReduceBps: 5000, guardSlippageBps: 100}));
+        h.setAgent(agent, true);
+        vm.stopPrank();
+        Halter.Order memory ok = _restingBid(BTC, _minQty(BTC));
+        vm.prank(agent);
+        (bool placed, uint128 id) = h.place(ok);
+        assertTrue(placed, "placed for the app wallet");
+        assertGt(id, 0);
+        // the paddock still binds: ETH isn't in it
+        Halter.Order memory out = _restingBid(eth, _minQty(eth));
+        vm.prank(agent);
+        (bool placed2,) = h.place(out);
+        assertFalse(placed2, "outside the paddock");
+    }
+
+    function test_keylessCannotBeInitialisedTwiceOrByOthers() public {
+        (Halter h,,, address initKey,) = _keyless();
+        vm.prank(initKey);
+        vm.expectRevert(Halter.NotOwner.selector);
+        h.initialize(stranger);
+        vm.prank(stranger);
+        vm.expectRevert(Halter.NotOwner.selector);
+        h.initialize(stranger);
+    }
+
+    function test_implementationItselfCannotBeInitialised() public {
+        address initKey = makeAddr("initializer");
+        Halter impl = new Halter(owner, address(0), initKey, FACTORY, BANK);
+        vm.prank(initKey);
+        vm.expectRevert(Halter.NotOwner.selector);
+        impl.initialize(initKey);
     }
 
     function _mark(address pool) internal view returns (uint256 m) {

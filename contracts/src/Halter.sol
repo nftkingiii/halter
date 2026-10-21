@@ -53,6 +53,11 @@ contract Halter is SomniaEventHandler {
     /// Optional second manager, for accounts whose wallet can't sign outside the
     /// dreamDEX app. The account or the admin can replace or clear it.
     address public admin;
+    /// Keyless operators (EIP-7702): an address nobody holds a key for runs this code
+    /// and keeps its own storage, so it starts uninitialised. Only `initializer`, set at
+    /// deploy, may initialise it, once, in the same transaction that installs the code.
+    address public immutable initializer;
+    bool public initialized;
     IPerpPoolFactory public immutable factory;
     IMarginBank public immutable marginBank;
 
@@ -91,9 +96,11 @@ contract Halter is SomniaEventHandler {
 
     uint8 private constant IOC = 2;
 
-    constructor(address owner_, address admin_, IPerpPoolFactory factory_, IMarginBank marginBank_) {
+    constructor(address owner_, address admin_, address initializer_, IPerpPoolFactory factory_, IMarginBank marginBank_) {
         owner = owner_;
         admin = admin_;
+        initializer = initializer_;
+        initialized = true; // this contract's own storage is final; only a delegated address can initialise
         factory = factory_;
         marginBank = marginBank_;
     }
@@ -126,6 +133,14 @@ contract Halter is SomniaEventHandler {
     }
 
     /// @notice One tap: every agent stops at once. Reducing orders still pass through the guard.
+    /// One-time setup of a delegated (keyless) operator's storage.
+    function initialize(address admin_) external {
+        if (initialized || initializer == address(0) || msg.sender != initializer) revert NotOwner();
+        initialized = true;
+        admin = admin_;
+        emit AdminSet(admin_);
+    }
+
     function setAdmin(address admin_) external onlyOwner {
         admin = admin_;
         emit AdminSet(admin_);
