@@ -40,7 +40,7 @@ The agent key trades only through Halter. Every row is one transaction. Allowed 
 | 5 | Owner revokes every agent | `Revoked` | [0x180ddd0b…](https://explorer.testnet.somnia.network/tokyo/tx/0x180ddd0bf051b6d1c3040735db9b9bb2f2beae5ad730ae59e03cdb75b5d9e8bb) |
 | 6 | Agent tries again after revoke | `OrderBlocked(Revoked)` | [0xbfefa440…](https://explorer.testnet.somnia.network/tokyo/tx/0xbfefa4402d76f6430e600624fc9f9f05e98da69b623c12edb63ff3b780416578) |
 
-The agent then cancelled its three resting orders through Halter and the owner restored the mandate. Setup (deposit, operator link, pools, mandate) and every hash are in [`deployments/hideki.json`](deployments/hideki.json). Reproduce with `node app/scripts/proof-orders.mjs`.
+The agent then cancelled its three resting orders through Halter and the owner restored the mandate. Setup (deposit, operator link, pools, mandate) and every hash are in [`deployments/hideki-v1.json`](deployments/hideki-v1.json). Reproduce with `node app/scripts/proof-orders.mjs`.
 
 ### Evidence by kind
 

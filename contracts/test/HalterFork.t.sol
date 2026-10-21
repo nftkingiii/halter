@@ -170,6 +170,79 @@ contract HalterForkTest is Test {
         halter.guard(BTC);
     }
 
+    // ---------------------------------------------------------------- guard + reactivity
+
+    address constant PRECOMPILE = 0x0000000000000000000000000000000000000100;
+
+    /// Agent buys ~$40 of BTC with an IOC through Halter, so the account holds a real position.
+    function _openLong() internal returns (int256 size) {
+        IPerpPool pp = IPerpPool(BTC);
+        IPerpPool.BookParams memory b = pp.getOrderBookParameters();
+        uint256 mark = _mark(BTC);
+        uint256 qty = (40e18 * pp.getOneBase() / mark) / b.lotSize * b.lotSize;
+        uint256 price = (mark * 101 / 100) / b.tickSize * b.tickSize;
+        Halter.Order memory o = Halter.Order({pool: BTC, isBid: true, price: price, quantity: qty, orderType: 2});
+        vm.prank(agent);
+        (bool placed,) = halter.place(o);
+        assertTrue(placed, "IOC open");
+        size = BANK.getPosition(owner, BTC).size;
+        assertGt(size, 0, "long opened");
+    }
+
+    /// Owner moves the guard line far above current health, as the demo does.
+    function _armGuard(uint32 healthBps) internal {
+        (uint64 exp, uint16 lev, uint128 loss,, uint16 red, uint16 slip) = halter.mandate();
+        vm.prank(owner);
+        halter.setMandate(
+            Halter.Mandate({
+                expiresAt: exp,
+                maxLeverageX100: lev,
+                dailyLossCap: loss,
+                guardHealthBps: healthBps,
+                guardReduceBps: red,
+                guardSlippageBps: slip
+            })
+        );
+    }
+
+    function test_guardReducesLivePositionBelowLine() public {
+        int256 before = _openLong();
+        _armGuard(4_000_000_000); // fire while equity < 400,000x maintenance: always, for the test
+        halter.guard(BTC);
+        int256 afterSize = BANK.getPosition(owner, BTC).size;
+        assertLt(afterSize, before, "guard reduced the long");
+        assertGe(afterSize, 0, "guard never flips the position");
+    }
+
+    function test_onEventRejectsAnyoneButPrecompile() public {
+        bytes32[] memory topics = new bytes32[](3);
+        vm.expectRevert();
+        halter.onEvent(PRECOMPILE, topics, "");
+    }
+
+    function test_reactivityCallbackRunsGuard() public {
+        int256 before = _openLong();
+        _armGuard(4_000_000_000);
+        bytes32[] memory topics = new bytes32[](3);
+        topics[0] = keccak256("EpochTick(uint64,uint64)");
+        topics[1] = bytes32(uint256(42));
+        vm.expectEmit(true, false, false, true, address(halter));
+        emit Halter.GuardChecked(42, 1);
+        vm.prank(PRECOMPILE);
+        halter.onEvent(PRECOMPILE, topics, "");
+        assertLt(BANK.getPosition(owner, BTC).size, before, "callback reduced the long");
+    }
+
+    function test_reactivityCallbackIsQuietWhenHealthy() public {
+        _openLong();
+        bytes32[] memory topics = new bytes32[](3);
+        topics[0] = keccak256("EpochTick(uint64,uint64)");
+        vm.expectEmit(true, false, false, true, address(halter));
+        emit Halter.GuardChecked(0, 0);
+        vm.prank(PRECOMPILE);
+        halter.onEvent(PRECOMPILE, topics, "");
+    }
+
     function _mark(address pool) internal view returns (uint256 m) {
         (, m) = IPerpPool(pool).tryGetMarkPrice();
     }

@@ -1,21 +1,24 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.30;
 
 import {IPerpPool, IPerpPoolFactory, IMarginBank, Position} from "./interfaces/IDreamDex.sol";
+import {SomniaEventHandler} from "./vendor/somnia-reactivity/SomniaEventHandler.sol";
 
 /// @title Halter
 /// @notice A mandate contract a dreamDEX account links as its bot. Agents never
 ///         hold the account's operator grant: they ask Halter, and Halter places
 ///         the order with `placeOrderFor` only if it fits the owner's mandate.
 ///         Every decision, allowed or blocked, is an event on chain.
-contract Halter {
+///         Halter is also a Somnia Reactivity handler: a subscription on the
+///         chain's EpochTick calls it, and it runs the guard with no keeper.
+contract Halter is SomniaEventHandler {
     // ---------------------------------------------------------------- types
 
     struct Mandate {
         uint64 expiresAt; // unix seconds; 0 = no expiry
         uint16 maxLeverageX100; // account notional / equity, x100 (500 = 5x)
         uint128 dailyLossCap; // quote units (USDso, 18 decimals); 0 = off
-        uint16 guardHealthBps; // auto-reduce when equity < mmReq * bps / 1e4; 0 = off
+        uint32 guardHealthBps; // auto-reduce when equity < mmReq * bps / 1e4 (15000 = 1.5x); 0 = off
         uint16 guardReduceBps; // share of the position the guard closes, bps
         uint16 guardSlippageBps; // IOC price room for the guard order, bps
     }
@@ -70,6 +73,8 @@ contract Halter {
     event OrderBlocked(address indexed agent, address indexed pool, Reason reason, bool isBid, uint256 price, uint256 quantity);
     event PairPlaced(address indexed agent, uint128 orderIdA, uint128 orderIdB);
     event GuardFired(address indexed caller, address indexed pool, int256 equity, uint256 mmReq, uint256 quantity, uint128 orderId);
+    /// One per Reactivity callback, so every check the chain ran is on record.
+    event GuardChecked(uint64 indexed epoch, uint256 fired);
 
     // ---------------------------------------------------------------- errors
 
@@ -172,11 +177,13 @@ contract Halter {
         IPerpPool pp = IPerpPool(pool);
         (bool ok, uint256 mark) = pp.tryGetMarkPrice();
         if (!ok) revert GuardNotTriggered();
-        (uint256 tick,, uint256 lot) = _bookParams(pp);
+        (uint256 tick, uint256 minQty, uint256 lot) = _bookParams(pp);
 
         uint256 abs = p.size > 0 ? uint256(int256(p.size)) : uint256(-int256(p.size));
         uint256 qty = (abs * m.guardReduceBps / 1e4) / lot * lot;
-        if (qty == 0) qty = abs;
+        // The book refuses orders under minQuantity, and a remainder under it could
+        // never be closed by the guard later, so small positions close in full.
+        if (qty < minQty || abs - qty < minQty) qty = abs;
         bool isBid = p.size < 0; // short is closed by buying
         uint256 room = mark * m.guardSlippageBps / 1e4;
         uint256 price = isBid ? (mark + room) / tick * tick : ((mark - room) + tick - 1) / tick * tick;
@@ -186,12 +193,19 @@ contract Halter {
     }
 
     /// @notice Guard every allowed pool that holds a position; never reverts.
-    function guardAll() external returns (uint256 fired) {
+    function guardAll() public returns (uint256 fired) {
         for (uint256 i; i < allowedPools.length; ++i) {
             try this.guard(allowedPools[i]) {
                 ++fired;
             } catch {}
         }
+    }
+
+    /// @dev Reactivity callback (only the precompile at 0x0100 reaches it). The
+    ///      subscription listens to EpochTick(uint64 indexed epoch, uint64 indexed block).
+    function _onEvent(address, bytes32[] calldata eventTopics, bytes calldata) internal override {
+        uint64 epoch = eventTopics.length > 1 ? uint64(uint256(eventTopics[1])) : 0;
+        emit GuardChecked(epoch, guardAll());
     }
 
     // ---------------------------------------------------------------- views

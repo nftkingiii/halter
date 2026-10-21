@@ -2,7 +2,7 @@
 //   node scripts/setup-halter.mjs status   read-only
 //   node scripts/setup-halter.mjs deploy   agent key deploys Halter (owner = OWNER_ADDR)
 //   node scripts/setup-halter.mjs setup    owner: deposit margin, link Halter, set pools, mandate, agent
-import { formatEther, parseEther } from "viem";
+import { formatEther, parseEther, parseAbi, keccak256, toBytes, toFunctionSelector, parseEventLogs } from "viem";
 import {
   ADDR, POOLS, SEL, pub, owner, agent, wallet, halterArtifact, erc20Abi, bankAbi, registryAbi, poolAbi,
   loadDeployment, saveDeployment, send,
@@ -33,6 +33,8 @@ async function status() {
 
 if (mode === "deploy") {
   if (dep.halter) throw new Error(`already deployed at ${dep.halter}`);
+  // v1 lives in deployments/hideki-v1.json; remember it so setup can unlink it.
+  dep.previous ??= process.env.PREVIOUS_HALTER;
   const hash = await wallet(agent).deployContract({
     abi: halterAbi,
     bytecode: art.bytecode.object,
@@ -55,6 +57,13 @@ if (mode === "setup") {
     if (allowance < margin) await send(dep, "approve USDso to MarginBank", owner, { address: ADDR.usdso, abi: erc20Abi, functionName: "approve", args: [ADDR.marginBank, margin] });
     await send(dep, `deposit ${formatEther(margin)} USDso margin`, owner, { address: ADDR.marginBank, abi: bankAbi, functionName: "deposit", args: [margin] });
   }
+  // An earlier Halter linked to this account keeps no power once v2 takes over.
+  if (dep.previous && dep.previous !== H) {
+    await send(dep, `unlink previous Halter ${dep.previous.slice(0, 10)}`, owner, {
+      address: ADDR.registry, abi: registryAbi, functionName: "setOperatorApprovalGlobal",
+      args: [dep.previous, [SEL.placeOrderFor, SEL.cancelOrderFor, SEL.reduceOrderFor], false],
+    });
+  }
   await send(dep, "link Halter as operator", owner, {
     address: ADDR.registry, abi: registryAbi, functionName: "setOperatorApprovalGlobal",
     args: [H, [SEL.placeOrderFor, SEL.cancelOrderFor, SEL.reduceOrderFor], true],
@@ -67,6 +76,36 @@ if (mode === "setup") {
     args: [{ expiresAt: BigInt(now + 30 * 86400), maxLeverageX100: 200, dailyLossCap: parseEther("25"), guardHealthBps: 15000, guardReduceBps: 5000, guardSlippageBps: 100 }],
   });
   await send(dep, "allow agent key", owner, { address: H, abi: halterAbi, functionName: "setAgent", args: [agent.address, true] });
+}
+
+if (mode === "subscribe") {
+  // Somnia Reactivity: the chain calls Halter.onEvent on every EpochTick. The owner
+  // EOA owns the subscription and pays each callback's gas (it must hold >= 32 STT).
+  if (!dep.halter) throw new Error("deploy first");
+  const PRECOMPILE = "0x0000000000000000000000000000000000000100";
+  const rxAbi = parseAbi([
+    "function subscribe((bytes32[4] eventTopics, address origin, address caller, address emitter, address handlerContractAddress, bytes4 handlerFunctionSelector, uint64 priorityFeePerGas, uint64 maxFeePerGas, uint64 gasLimit, bool isGuaranteed, bool isCoalesced) subscriptionData) returns (uint256)",
+    "event SubscriptionCreated(uint256 indexed subscriptionId, address indexed owner, (bytes32[4] eventTopics, address origin, address caller, address emitter, address handlerContractAddress, bytes4 handlerFunctionSelector, uint64 priorityFeePerGas, uint64 maxFeePerGas, uint64 gasLimit, bool isGuaranteed, bool isCoalesced) subscriptionData)",
+  ]);
+  const zero = "0x0000000000000000000000000000000000000000000000000000000000000000";
+  const data = {
+    eventTopics: [keccak256(toBytes("EpochTick(uint64,uint64)")), zero, zero, zero], // 0 = every epoch
+    origin: "0x0000000000000000000000000000000000000000",
+    caller: "0x0000000000000000000000000000000000000000",
+    emitter: PRECOMPILE,
+    handlerContractAddress: dep.halter,
+    handlerFunctionSelector: toFunctionSelector("onEvent(address,bytes32[],bytes)"),
+    priorityFeePerGas: 1_000_000_000n,
+    maxFeePerGas: 0n,
+    gasLimit: 10_000_000n,
+    isGuaranteed: false,
+    isCoalesced: false,
+  };
+  const r = await send(dep, "subscribe Halter to EpochTick", owner, { address: PRECOMPILE, abi: rxAbi, functionName: "subscribe", args: [data] });
+  const created = parseEventLogs({ abi: rxAbi, logs: r.logs, eventName: "SubscriptionCreated" })[0];
+  dep.subscriptionId = created ? created.args.subscriptionId.toString() : "unknown (no SubscriptionCreated log)";
+  saveDeployment(dep);
+  console.log(`  subscription id ${dep.subscriptionId}`);
 }
 
 await status();
