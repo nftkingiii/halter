@@ -2,7 +2,7 @@
 
 **Let a bot trade your dreamDEX perps account, but only inside limits you set on chain.**
 
-Linking a bot to dreamDEX today hands one key full trading power over your account. It can't withdraw, but it can open any of the 21 perp markets, at any size and leverage, for as long as it runs. Halter is a contract you link *instead* of the bot. Your bots and AI agents send orders to Halter, and Halter forwards an order with `placeOrderFor` only if it fits your **paddock**, the limits you set:
+Linking a bot to dreamDEX today hands one key full trading power over your account. It can't withdraw or change leverage, but it can trade any of the 21 perp markets, at any size the account's margin allows, for as long as it runs. Halter is a contract you link *instead* of the bot. Your bots and AI agents send orders to Halter, and Halter forwards an order with `placeOrderFor` only if it fits your **paddock**, the limits you set:
 
 - **Where:** only the markets you allow, each checked against dreamDEX's own `PerpPoolFactory`. A look-alike pool from another venue can't be added, and no order reaches one.
 - **How much:** a notional cap per market, an account leverage cap, a daily loss cap, and an end date.
