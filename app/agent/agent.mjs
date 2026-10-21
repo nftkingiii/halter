@@ -210,7 +210,25 @@ Each cycle:
 3. Preview before you place. Respect the paddock; if the operator asks for something outside it, explain that Halter will refuse it rather than looking for a way around.
 4. Finish with a short plain summary: what you saw, what you did, and why.`;
 
+// Hideki sometimes answers a read with a transient error whose "data" is null, which
+// viem then fails to format. Reads are safe to retry; orders are never retried here,
+// because a retry could send a second transaction.
+const READS = new Set(["read_paddock", "read_market", "preview_order"]);
 async function runTool(name, input, log) {
+  if (!READS.has(name)) return runToolOnce(name, input, log);
+  for (let attempt = 1; ; attempt++) {
+    try { return await runToolOnce(name, input, log); }
+    catch (e) {
+      if (attempt >= 3) throw e;
+      log.retries = (log.retries ?? 0) + 1;
+      const lines = (x) => String(x ?? "").split(/\r?\n/);
+      log.retryErrors = [...(log.retryErrors ?? []), { tool: name, attempt, error: lines(e.message)[0], at: lines(e.stack).slice(1, 3).join(" | ") }];
+      await new Promise((r) => setTimeout(r, 400 * attempt));
+    }
+  }
+}
+
+async function runToolOnce(name, input, log) {
   switch (name) {
     case "read_paddock": return readPaddock();
     case "read_market": return readMarket(input);
@@ -271,10 +289,10 @@ async function cycle(note) {
 
   for (const s of log.steps) {
     if (s.say) console.log(`\n${s.say}`);
-    if (s.tool) console.log(`  · ${s.tool}(${JSON.stringify(s.input)})${s.error ? ` ✗ ${s.error}` : s.tool === "place_order" || s.tool === "close_position" ? ` → ${JSON.stringify(s.result)}` : ""}`);
+    if (s.tool) console.log(`  - ${s.tool}(${JSON.stringify(s.input)})${s.error ? ` FAILED ${s.error}` : s.tool === "place_order" || s.tool === "close_position" ? ` => ${JSON.stringify(s.result)}` : ""}`);
     if (s.refusal) console.log(`  refused: ${JSON.stringify(s.refusal)}`);
   }
-  console.log(`\n  ${log.orders.length} order(s) · ${log.usage.input} in / ${log.usage.output} out tokens · ~$${log.cost_usd}`);
+  console.log(`\n  ${log.orders.length} order(s), ${log.usage.input} in / ${log.usage.output} out tokens, ~$${log.cost_usd}`);
 }
 
 const [mode = "once", arg] = process.argv.slice(2);
@@ -297,5 +315,7 @@ if (mode === "check") {
     await new Promise((r) => setTimeout(r, every * 60_000));
   }
 } else {
-  await cycle(mode === "once" ? arg : undefined);
+  // "@name" loads agent/notes/name.txt, so notes never pass through shell quoting.
+  const note = arg?.startsWith("@") ? readFileSync(new URL(`./notes/${arg.slice(1).replace(/[^\w-]/g, "")}.txt`, import.meta.url), "utf8").trim() : arg;
+  await cycle(mode === "once" ? note : undefined);
 }
