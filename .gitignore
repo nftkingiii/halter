@@ -10,3 +10,7 @@ HACK_EVENT_GATE.json
 SOURCES.md
 evidence/private/
 deployments/dryrun.json
+DESIGN_NOTES.md
+app/server/data/
+app/dist/
+.claude/
