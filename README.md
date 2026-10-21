@@ -8,7 +8,7 @@ Linking a bot to dreamDEX today means handing a key full trading power over your
 - **Notional cap per market**, **account leverage cap**, **daily loss cap** and **expiry**.
 - **One-tap revoke**: every agent stops at once.
 - **Pairs in one transaction**: both legs are placed or neither is.
-- **A guard** that reduces a position when margin health drops, so a stop still holds while your bot is offline (wiring to Somnia Reactivity is in progress).
+- **A guard on Somnia Reactivity**: every epoch (~5 min) the chain itself calls Halter, which reduces a position whose margin health is below your line. No keeper, and no bot needs to be running.
 
 Every decision is a public record. Allowed orders emit `OrderAllowed`. Blocked orders don't revert: they emit `OrderBlocked` with the reason, so what your agent *tried* is as visible as what it did.
 
@@ -23,11 +23,27 @@ Built for the [dreamDEX Perps Builder Bounty](https://dorahacks.io/hackathon/dre
 
 Work in progress. Live on Somnia Hideki testnet since 2026-10-20.
 
-**Halter:** [`0x24bd6b71f27c7aad65fb9842c6181b65b571a833`](https://explorer.testnet.somnia.network/tokyo/address/0x24bd6b71f27c7aad65fb9842c6181b65b571a833)
+**Halter (v2, current):** [`0xc904a9ac96bfda2989ead531bc57fd8d5ee56b06`](https://explorer.testnet.somnia.network/tokyo/address/0xc904a9ac96bfda2989ead531bc57fd8d5ee56b06), Reactivity subscription `14557199` on `EpochTick`
+Halter v1 (order proofs below, now unlinked from the account): `0x24bd6b71f27c7aad65fb9842c6181b65b571a833`
 Owner (test account, 100 USDso margin): `0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580` · Agent key: `0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B`
-Mandate: BTC and ETH only, $60 notional cap each, 2x account leverage, $25 daily loss cap, 30-day expiry.
+Mandate: BTC and ETH only, $60 notional cap each, 2x account leverage, $25 daily loss cap, 30-day expiry, guard line 1.5x maintenance margin.
 
-### Live proof run (Hideki testnet)
+### Live guard run on Somnia Reactivity (Hideki testnet, v2)
+
+Nobody calls the guard. The owner subscribed Halter to the chain's `EpochTick`, and the chain calls `Halter.onEvent` once per epoch. The callbacks below are system transactions: `onEvent` reverts for any sender but the precompile `0x0100`, and they carry system nonces and a placeholder signature (`r = 0x1`) rather than the owner's own nonces 17 and 18.
+
+| # | Step | Outcome on chain | Tx |
+|---|---|---|---|
+| 1 | Agent opens a ~$40 BTC long through Halter (IOC) | position 48,000 units (0.00048 BTC) | [0xc9091480…](https://explorer.testnet.somnia.network/tokyo/tx/0xc9091480065b0a99363a9d7014e4f3e7ff2763b163a685462aa7b5066e6ce638) |
+| 2 | Chain calls Halter, epoch 9706, account healthy (~100x maintenance) | `GuardChecked(9706, 0)`, nothing traded, 238k gas | [0x6e2bf275…](https://explorer.testnet.somnia.network/tokyo/tx/0x6e2bf27568a9b0ed67cce31bc9f9f026336c7405eba8c986df2f3580f8a60291) |
+| 3 | Owner raises the guard line to 201.6x maintenance (**demo threshold**: a real breach of 1.5x needs a large market move) | `MandateSet` | [0x1a6f2b40…](https://explorer.testnet.somnia.network/tokyo/tx/0x1a6f2b407dea9b6c45f5e24091af2ed38e549b45ada96d34120091bf0d1bf385) |
+| 4 | Chain calls Halter, epoch 9707, 3,000 blocks later | `GuardFired` + `GuardChecked(9707, 1)`; dreamDEX BTC pool and MarginBank logs; position 48,000 → 24,000 | [0x99626aab…](https://explorer.testnet.somnia.network/tokyo/tx/0x99626aab83b6d936090fe4cbb155d5b981c3e367323446a4590b8d339bff1730) |
+| 5 | Owner restores the 1.5x line | `MandateSet` | [0x6ba9727f…](https://explorer.testnet.somnia.network/tokyo/tx/0x6ba9727f58241c3743337d92386b32e2468b92a420a6312e5515910f9a0bc0d0) |
+| 6 | Agent closes the rest through Halter (reducing IOC) | position 0 | [0xf74f89b6…](https://explorer.testnet.somnia.network/tokyo/tx/0xf74f89b6097c404b2ef7590ba235d59c0bf0b0a9fa95acbf808f657a2b4effdf) |
+
+v2 setup, the subscription and every hash: [`deployments/hideki.json`](deployments/hideki.json). Reproduce with `node app/scripts/guard-demo.mjs`.
+
+### Live order proof run (Hideki testnet, v1)
 
 The agent key trades only through Halter. Every row is one transaction. Allowed orders carry logs from dreamDEX's BTC/ETH pools and MarginBank; blocked orders succeed as transactions but carry only Halter's `OrderBlocked` log, so nothing reaches a pool.
 
@@ -49,9 +65,10 @@ The agent then cancelled its three resting orders through Halter and the owner r
 | Halter, as the account's linked operator, places and cancels orders on dreamDEX perp pools | rows 1 and 4 above | **live testnet** |
 | Over-cap, unlisted-pool and post-revoke orders are blocked, with the reason on chain | rows 2, 3, 6 | **live testnet** |
 | Pairs go out in one transaction | row 4 | **live testnet** |
-| Over-leverage, look-alike pool, stranger and expired orders are blocked; a pair with a blocked leg places neither leg | `contracts/test/HalterFork.t.sol`, 12/12 passing | fork of live Hideki state |
-| Guard reduces a position when margin health drops | contract written, not yet exercised | pending |
-| Reactivity triggers the guard | not built | pending |
+| Somnia Reactivity calls Halter every epoch with no keeper; quiet while healthy | guard rows 2 and 4 | **live testnet** |
+| The guard reduces a live position below the line, without flipping it | guard row 4 (fired at a labelled demo threshold) | **live testnet** |
+| Over-leverage, look-alike pool, stranger and expired orders are blocked; a pair with a blocked leg places neither leg; `onEvent` rejects any caller but the precompile | `contracts/test/HalterFork.t.sol`, 16/16 passing | fork of live Hideki state |
+| The guard fires on a real 1.5x breach from a market move | not observed | pending |
 
 ## Layout
 

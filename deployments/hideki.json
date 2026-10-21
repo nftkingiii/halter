@@ -1,0 +1,115 @@
+{
+  "chainId": 50383,
+  "txs": [
+    {
+      "label": "deploy Halter",
+      "hash": "0x7043d9b02778702fa52141a9ef1a8371bbfe7ac447bd92678d1db04ab80366fb",
+      "block": 29119837,
+      "from": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B"
+    },
+    {
+      "label": "unlink previous Halter 0x24bd6b71",
+      "hash": "0x0314c594c67ec91112658adf4389ffe86e556c7d746e973b893198bb1e951e1d",
+      "block": 29119881,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "link Halter as operator",
+      "hash": "0x26af5ac4652b1139e43e8c601986a0bbe83de8f8c03a10a010edb4f797ada2fa",
+      "block": 29119893,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "allow BTC, cap $60",
+      "hash": "0xe1ec01cb396f1037a194a34203b2853d454d429ca3e39dcf223e9d220a8ab63b",
+      "block": 29119906,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "allow ETH, cap $60",
+      "hash": "0x1f31da58e02dbae8a162c449d70e33b71b651b0603946f63a5ba0e722b249eac",
+      "block": 29119918,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "set mandate (2x, $25/day, 30d)",
+      "hash": "0xa97e2624e60f451ae2c83abc52d8ec1cfa1a9427841c0c3de27f65911c8dfcf5",
+      "block": 29119930,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "allow agent key",
+      "hash": "0xfe07af7bd0a453e056a585f8ea2db14ff7aa3cd1316c6bd37d3c726592cce167",
+      "block": 29119942,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "subscribe Halter to EpochTick",
+      "hash": "0x3f6cfade8bc0b29ace973ba6563583a52c2bf4bd81c8ca27b19a45f856e9fd77",
+      "block": 29119985,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    }
+  ],
+  "previous": "0x24bd6b71f27c7aad65fb9842c6181b65b571a833",
+  "halter": "0xc904a9ac96bfda2989ead531bc57fd8d5ee56b06",
+  "owner": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580",
+  "agent": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B",
+  "deployTx": "0x7043d9b02778702fa52141a9ef1a8371bbfe7ac447bd92678d1db04ab80366fb",
+  "deployBlock": 29119837,
+  "subscriptionId": "14557199",
+  "guardDemo": [
+    {
+      "label": "agent opens ~$40 BTC long (IOC)",
+      "at": "2026-10-21T06:25:53.691Z",
+      "hash": "0xc9091480065b0a99363a9d7014e4f3e7ff2763b163a685462aa7b5066e6ce638",
+      "block": 29120213
+    },
+    {
+      "label": "reactivity callback, epoch 9706, fired 0",
+      "at": "2026-10-21T06:27:14.053Z",
+      "hash": "0x6e2bf27568a9b0ed67cce31bc9f9f026336c7405eba8c986df2f3580f8a60291",
+      "block": 29120999,
+      "events": [
+        "GuardChecked"
+      ],
+      "txFrom": "0xa7770b44a07f3a931cb30ae2601a52d01f16b580",
+      "txTo": "0xc904a9ac96bfda2989ead531bc57fd8d5ee56b06"
+    },
+    {
+      "label": "owner sets demo guard line (201.6342x)",
+      "at": "2026-10-21T06:27:15.579Z",
+      "hash": "0x1a6f2b407dea9b6c45f5e24091af2ed38e549b45ada96d34120091bf0d1bf385",
+      "block": 29121031
+    },
+    {
+      "label": "reactivity callback, epoch 9707, fired 1",
+      "at": "2026-10-21T06:32:18.848Z",
+      "hash": "0x99626aab83b6d936090fe4cbb155d5b981c3e367323446a4590b8d339bff1730",
+      "block": 29123999,
+      "events": [
+        "GuardFired",
+        "GuardChecked"
+      ],
+      "txFrom": "0xa7770b44a07f3a931cb30ae2601a52d01f16b580",
+      "txTo": "0xc904a9ac96bfda2989ead531bc57fd8d5ee56b06"
+    },
+    {
+      "label": "position before/after guard",
+      "at": "2026-10-21T06:32:18.999Z",
+      "before": "48000",
+      "after": "24000"
+    },
+    {
+      "label": "owner restores guard line (1.5x)",
+      "at": "2026-10-21T06:32:20.222Z",
+      "hash": "0x6ba9727f58241c3743337d92386b32e2468b92a420a6312e5515910f9a0bc0d0",
+      "block": 29124076
+    },
+    {
+      "label": "agent closes the rest (reducing IOC)",
+      "at": "2026-10-21T06:32:21.902Z",
+      "hash": "0xf74f89b6097c404b2ef7590ba235d59c0bf0b0a9fa95acbf808f657a2b4effdf",
+      "block": 29124093
+    }
+  ]
+}
