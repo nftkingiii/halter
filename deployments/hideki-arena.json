@@ -1,0 +1,42 @@
+{
+  "chainId": 50383,
+  "txs": [
+    {
+      "label": "deploy Halter",
+      "hash": "0x2f5a7b8477bf5c5d03e16bbff08ce69e5c7ad386e13bd8ce6cf295ab470fbe1c",
+      "block": 29478504,
+      "from": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B"
+    },
+    {
+      "label": "allow BTC, cap $60",
+      "hash": "0xaab9982be171ba3ab60ed013736f7d862c60217dc8979638d9e79a109d0fb14f",
+      "block": 29478548,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "allow ETH, cap $60",
+      "hash": "0xb3fccfa430d2a5365af41febd08e567b0eab57e3b582d5428c4b694986d00dc3",
+      "block": 29478560,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "set mandate (2x, $25/day, 30d)",
+      "hash": "0x055eeec922bdc86e636ee475a44c36e4a8c428c7fcda7595f2cbf5d159f96837",
+      "block": 29478572,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "allow agent key",
+      "hash": "0x38e558ed1a5315ed097defd0ae4e1edee9049b2800680a442e4cdcc19d2702b7",
+      "block": 29478584,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    }
+  ],
+  "halter": "0x143ec8eb34fb826d51090b1dfcf40ecbab241e75",
+  "owner": "0x0B2BdDB6D30c30f3923DDEb2EE875d025bc42034",
+  "admin": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580",
+  "agent": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B",
+  "deployTx": "0x2f5a7b8477bf5c5d03e16bbff08ce69e5c7ad386e13bd8ce6cf295ab470fbe1c",
+  "deployBlock": 29478504,
+  "note": "Superseded: the dreamDEX app refuses contract addresses in Link a Bot (feedback/03), so this direct deployment for Wallet 1 was never linked. See hideki-keyless.json."
+}

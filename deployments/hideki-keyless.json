@@ -1,0 +1,79 @@
+{
+  "chainId": 50383,
+  "txs": [
+    {
+      "label": "deploy Halter implementation",
+      "hash": "0x8159e55c15a9b013250f174387100208173f0845ef56591fe4e2a023ea203884",
+      "block": 29507000,
+      "from": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B"
+    },
+    {
+      "label": "activate keyless operator (EIP-7702) + initialize",
+      "hash": "0x6553036aa9cf628a6d1950ab91fd32b9dcfd731ada069fc200897a5377e5d8ff",
+      "block": 29510679,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "allow BTC, cap $60",
+      "hash": "0x3dc9328c86510c4fe1facf01c4771b1fe5b71fc89e49403b3f6eeed19321c189",
+      "block": 29510716,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "allow ETH, cap $60",
+      "hash": "0x36c303f4149801d29e39a3c4f192c9c03c32f257cde72b727a97ae7df137071f",
+      "block": 29510728,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "set paddock (2x, $25/day, 30d)",
+      "hash": "0xef6ae8efa66fd72a73c60cfafb5f1f5a0bcc79205851e1acc50063ea96d2e851",
+      "block": 29510740,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "allow agent key",
+      "hash": "0x2d77346f2038b28ad9f988f764050392975099f52fa862590bdb11525fa46b92",
+      "block": 29510752,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    }
+  ],
+  "implementation": "0x5a186a5b9e4c671d91f72ebb91c541e69ba24113",
+  "owner": "0x0B2BdDB6D30c30f3923DDEb2EE875d025bc42034",
+  "admin": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580",
+  "agent": "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B",
+  "deployTx": "0x8159e55c15a9b013250f174387100208173f0845ef56591fe4e2a023ea203884",
+  "deployBlock": 29507000,
+  "keyless": {
+    "authority": "0xb4Ae094b053B2E6B1E572281d245368D8269E55b",
+    "seedText": "Halter keyless operator v1:0x5a186a5b9e4c671d91f72ebb91c541e69ba24113",
+    "counter": 0,
+    "authorization": {
+      "chainId": 50383,
+      "address": "0x5a186a5b9e4c671d91f72ebb91c541e69ba24113",
+      "nonce": 0
+    },
+    "signature": {
+      "r": "0xd446111dea01cbe86287455458d35e5af9fcf040884250cd7a9881bf3865cbe1",
+      "s": "0x18bb74c016449ce7d80f710138e26408e66500a699eaba33517f75135024cbca",
+      "yParity": 0
+    },
+    "authorizationHash": "0xe992a2d3d52e159aee217d34e561a3f06ae1d4830fceed793df3cea445d6db96"
+  },
+  "halter": "0xb4Ae094b053B2E6B1E572281d245368D8269E55b",
+  "appLink": {
+    "by": "dreamDEX app (Link a Bot), sent by the app key 0x9dc5f1a06cc3e8b2cbcfbf88379b45d42901d927 through Wallet 1",
+    "txs": [
+      {
+        "hash": "0x7e21987d092b961ac78d89e0466c226b765e9abea5a5f49de7489b708e0f72b4",
+        "block": 29508372
+      },
+      {
+        "hash": "0xb7dd458505e6c2143d4c6f68c0b21b0696e70bc8de3cbd3f3a2a2789577d0dd6",
+        "block": 29508415
+      }
+    ],
+    "grants": "placeOrderFor, cancelOrderFor, reduceOrderFor on all 21 perp pools (read back 2026-10-21)"
+  },
+  "note": "Wallet 1 is a dreamDEX app wallet (smart-contract wallet). The keyless operator was linked while codeless, then activated by EIP-7702. Wallet 1 had no margin at activation, so checks return LeverageCap until its Arena paper USDso arrive."
+}

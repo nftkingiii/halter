@@ -44,6 +44,7 @@ The agent key is allowed by Halter, never by the account itself. The account lin
 |---|---|
 | **Halter v2** (current) | [`0xc904a9ac96bfda2989ead531bc57fd8d5ee56b06`](https://explorer.testnet.somnia.network/tokyo/address/0xc904a9ac96bfda2989ead531bc57fd8d5ee56b06) · Reactivity subscription `14557199` on `EpochTick` |
 | Halter v1 (order proofs, now unlinked) | `0x24bd6b71f27c7aad65fb9842c6181b65b571a833` |
+| **Keyless operator for a dreamDEX app wallet** | [`0xb4Ae094b053B2E6B1E572281d245368D8269E55b`](https://explorer.testnet.somnia.network/tokyo/address/0xb4Ae094b053B2E6B1E572281d245368D8269E55b) → Halter implementation `0x5a186a5b9e4c671d91f72ebb91c541e69ba24113`, for app wallet `0x0B2BdDB6D30c30f3923DDEb2EE875d025bc42034` |
 | Account (owner, test key, 100 USDso margin) | `0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580` |
 | Agent key | `0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B` |
 
@@ -90,6 +91,23 @@ The agent key then cancelled its three resting orders through Halter and the own
 
 The agent runs every 20 minutes on a VM; the app's **Agent** tab shows every cycle.
 
+### A real dreamDEX app wallet, through a keyless operator
+
+dreamDEX's *Link a Bot* refuses contract addresses ("That address is a contract", [`feedback/03`](feedback/03-app-link-a-bot-rejects-contract-operators.md)), and app wallets can only link through the app. So Halter gives them an operator **nobody holds a key for**:
+
+1. An authorization signature is chosen from a public seed (`"Halter keyless operator v1:<implementation>"`) and the address that "signed" it is recovered (Nick's method). Finding its key would mean solving a discrete log, so no one, including us, can sign for it. Anyone can recompute it: `DEPLOY=keyless node app/scripts/keyless.mjs verify`.
+2. The wallet links that address in the dreamDEX app while it still has no code.
+3. One EIP-7702 transaction installs Halter's code on it and initialises it in the same step, so nobody can initialise it first. From then on the address can only do what Halter's code allows.
+
+| Step | Outcome on chain | Tx |
+|---|---|---|
+| Deploy the Halter implementation for app wallet `0x0B2B…2034` | implementation `0x5a186a5b…4113`, locked against initialisation | [0x8159e55c…](https://explorer.testnet.somnia.network/tokyo/tx/0x8159e55c15a9b013250f174387100208173f0845ef56591fe4e2a023ea203884) |
+| Wallet 1 links keyless `0xb4Ae094b053B2E6B1E572281d245368D8269E55b` in the **dreamDEX app** (*Link a Bot*, sent by the app's key) | place, cancel and reduce granted on all 21 perp pools | [0x7e21987d…](https://explorer.testnet.somnia.network/tokyo/tx/0x7e21987d092b961ac78d89e0466c226b765e9abea5a5f49de7489b708e0f72b4), [0xb7dd4585…](https://explorer.testnet.somnia.network/tokyo/tx/0xb7dd458505e6c2143d4c6f68c0b21b0696e70bc8de3cbd3f3a2a2789577d0dd6) |
+| Activate: type-4 transaction with the keyless authorization, calling `initialize` | code `0xef0100…4113`, `initialized = true` | [0x6553036a…](https://explorer.testnet.somnia.network/tokyo/tx/0x6553036aa9cf628a6d1950ab91fd32b9dcfd731ada069fc200897a5377e5d8ff) |
+| Admin narrows it to the paddock: BTC and ETH at $60, 2×, $25/day, 30 days; agent allowed | `PoolSet`, `MandateSet`, `AgentSet` | in [`deployments/hideki-keyless.json`](deployments/hideki-keyless.json) |
+
+Read back through the keyless address: a SOL order is refused with `PoolNotAllowed` and a non-agent caller with `NotAgent`. A BTC order returns `LeverageCap` because Wallet 1 has no margin yet; it becomes tradable when the wallet's Perps Arena paper USDso arrive.
+
 ### Evidence by kind
 
 | Claim | Evidence | Kind |
@@ -100,9 +118,12 @@ The agent runs every 20 minutes on a VM; the app's **Agent** tab shows every cyc
 | Somnia Reactivity calls Halter every epoch with no keeper; quiet while healthy | guard rows 2, 4 | **live testnet** |
 | The guard cuts a live position below the line without flipping it | guard row 4, at a labelled demo threshold | **live testnet** |
 | The AI agent respects the paddock and refuses an out-of-paddock instruction | agent pressure test | **off-chain log** (no order sent) |
-| Over-leverage, look-alike pool, stranger and expired orders are blocked; a pair with a blocked leg places neither leg; `onEvent` rejects any caller but `0x0100` | `contracts/test/HalterFork.t.sol`, 16/16 passing | fork of live Hideki state |
+| Over-leverage, look-alike pool, stranger and expired orders are blocked; a pair with a blocked leg places neither leg; `onEvent` rejects any caller but `0x0100` | `contracts/test/HalterFork.t.sol`, 22/22 passing | fork of live Hideki state |
+| A real dreamDEX app wallet links a Halter operator through the dreamDEX app | keyless rows 2–3 | **live testnet** |
+| The keyless operator has Halter's code and enforces the paddock for the app wallet | keyless rows 3–4, read-back checks | **live testnet** |
 | The guard fires on a real 1.5× breach caused by the market | not observed | pending |
 | An order the AI agent decided to place on its own | not yet: it has stayed flat so far | pending |
+| Orders through the keyless operator for the app wallet | waits for the wallet's Arena paper USDso | pending |
 
 ## The app
 
@@ -138,7 +159,7 @@ node app/agent/agent.mjs loop 20        # a cycle every 20 minutes
 ## Layout
 
 ```
-contracts/   Halter.sol, dreamDEX interfaces, Somnia's SomniaEventHandler (vendored, MIT), fork tests
+contracts/   Halter.sol, dreamDEX interfaces, Somnia's SomniaEventHandler (vendored, MIT), fork tests (22)
 app/         web app (Vite + React), Node service, scripts, the AI agent
 deployments/ every deployment and proof transaction, by Halter version
 evidence/    agent decision logs referenced above
@@ -152,7 +173,8 @@ brand/       logo
 - Halter is unaudited testnet code. Don't link it to an account with real funds.
 - The guard firing above was triggered with a labelled demo threshold; it has not yet fired on a real market move.
 - The daily loss cap measures equity against the first equity Halter sees each UTC day, so it starts counting from the first order of the day.
-- The owner of the live deployment is a test key held on a VM. With a dreamDEX app wallet, the owner would link Halter through *Link a Bot* and sign the paddock from their own wallet.
+- The v1/v2 account is a test key held on a VM. The app-wallet deployment is a real dreamDEX account; its paddock is managed by an admin key, which the wallet can remove at any time (`setAdmin`), and unlinking the operator in the app removes all of its power.
+- A keyless operator's code is permanent: no key exists to sign a new delegation. If Halter's code had a bug, the fix is to unlink that address in the app and link a new one.
 - The Reactivity subscription is paid by the owner per epoch (~238k gas while healthy).
 
 ## Feedback track
@@ -160,6 +182,7 @@ brand/       logo
 Reports in [`feedback/`](feedback/), one issue per file:
 1. [Hideki RPC rejects EIP-1898 block parameters, so Foundry forks and anvil can't start](feedback/01-hideki-rpc-rejects-eip1898-block-params.md) (major, API)
 2. [eth_getLogs is capped at 1,000 blocks with a non-standard error code, undocumented](feedback/02-hideki-rpc-getlogs-1000-block-cap-nonstandard-error.md) (normal, API)
+3. [Link a Bot rejects contract operators that the protocol and dreamDEX's own StopRegistry use](feedback/03-app-link-a-bot-rejects-contract-operators.md) (normal, app)
 
 ## X posts
 
