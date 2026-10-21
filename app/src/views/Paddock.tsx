@@ -1,157 +1,148 @@
+import { useMemo } from "react";
 import type { LiveState } from "../chain";
 import { usd, notional, baseAmount } from "../chain";
-import { CURRENT, EXPLORER, MARKETS, OWNER, AGENT, SUBSCRIPTION_ID, DEMO_GUARD_BPS, marketOf, short } from "../config";
-import type { RawEvent } from "../data";
-import { IconCheck, IconStop, IconPulse } from "../icons";
+import { CURRENT, EXPLORER, MARKETS, OWNER, SUBSCRIPTION_ID, DEMO_GUARD_BPS, marketOf, short } from "../config";
+import { toRows, type RawEvent } from "../data";
+import { Tape } from "./Tape";
 
+const dateOf = (t: number) => new Date(t * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 const ago = (t: number) => {
   const s = Math.max(0, Math.round(Date.now() / 1000 - t));
-  if (s < 90) return `${s} s ago`;
-  if (s < 5400) return `${Math.round(s / 60)} min ago`;
-  return `${Math.round(s / 3600)} h ago`;
+  return s < 90 ? `${s} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`;
 };
-const dateOf = (t: number) => new Date(t * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 
-/** Position of a health ratio on a log scale from 1x to 200x. */
-const pos = (ratio: number) => Math.min(100, Math.max(0, (Math.log(Math.max(ratio, 1)) / Math.log(200)) * 100));
+// ---- the dial: log scale 1x..200x over a 180° arc ----
+const CX = 250, CY = 260, R = 190;
+const frac = (x: number) => Math.min(1, Math.max(0, Math.log(Math.max(x, 1)) / Math.log(200)));
+const at = (x: number, r = R) => {
+  const a = Math.PI * (1 - frac(x));
+  return [CX + r * Math.cos(a), CY - r * Math.sin(a)] as const;
+};
 
-export function PaddockView({ live, error, events }: { live: LiveState | null; error: string | null; events: RawEvent[] | null }) {
+function Dial({ ratio, line }: { ratio: number | null; line: number }) {
+  const ticks = [1, 2, 5, 10, 20, 50, 100, 200];
+  const [nx, ny] = at(ratio ?? 200, R - 28);
+  const [g1x, g1y] = at(line, R - 16);
+  const [g2x, g2y] = at(line, R + 14);
+  const [glx, gly] = at(line, R - 50);
+  return (
+    <svg viewBox="0 0 500 300" role="img" aria-label={ratio === null ? "No open position" : `Health ${ratio.toFixed(1)} times maintenance, guard line ${line} times`}>
+      <defs>
+        <linearGradient id="arc" x1="0" x2="1">
+          <stop offset="0" stopColor="#E07A45" /><stop offset=".25" stopColor="#C9A46A" /><stop offset="1" stopColor="#8DB596" />
+        </linearGradient>
+      </defs>
+      <path d={`M${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`} fill="none" stroke="#2A251F" strokeWidth="26" />
+      <path d={`M${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`} fill="none" stroke="url(#arc)" strokeWidth="4" />
+      {ticks.map((t) => {
+        const [ax, ay] = at(t, R - 14);
+        const [bx, by] = at(t, R + 12);
+        const [lx, ly] = at(t, R + 30);
+        return (
+          <g key={t}>
+            <line x1={ax} y1={ay} x2={bx} y2={by} stroke="#8D8372" strokeWidth="1.5" />
+            <text x={lx} y={ly + 4} textAnchor="middle" fontFamily="Space Mono" fontSize="11" fill="#8D8372">{t}×</text>
+          </g>
+        );
+      })}
+      <line x1={g1x} y1={g1y} x2={g2x} y2={g2y} stroke="#E07A45" strokeWidth="5" strokeLinecap="round" />
+      <text x={glx} y={gly} textAnchor={frac(line) < 0.5 ? "start" : "end"} fontFamily="Space Mono" fontSize="11" fill="#E07A45">GUARD {line}×</text>
+      {ratio !== null && <line x1={CX} y1={CY} x2={nx} y2={ny} stroke="#EDE4D3" strokeWidth="3" strokeLinecap="round" />}
+      <circle cx={CX} cy={CY} r="12" fill="#C9A46A" /><circle cx={CX} cy={CY} r="4" fill="#14120F" />
+      <text x={CX} y={CY - 56} textAnchor="middle" fontFamily="Fraunces" fontSize={ratio === null ? 40 : 54} fill="#EDE4D3">
+        {ratio === null ? "Flat" : `${ratio >= 100 ? Math.round(ratio) : ratio.toFixed(1)}×`}
+      </text>
+    </svg>
+  );
+}
+
+export function PaddockView({ live, error, events, status }: {
+  live: LiveState | null; error: string | null; events: RawEvent[] | null; status: { ok: boolean; error?: string };
+}) {
   const m = live?.mandate;
   const expired = !!m && m.expiresAt !== 0 && m.expiresAt * 1000 < Date.now();
-  const status = !live ? null : live.revoked ? "revoked" : expired ? "expired" : !live.agentAllowed ? "no-agent" : "open";
-  const guardLine = m ? m.guardHealthBps / 10_000 : 0;
+  const line = m ? m.guardHealthBps / 10_000 : 1.5;
   const ratio = live && live.mmReq > 0n ? Number((live.equity * 10_000n) / live.mmReq) / 10_000 : null;
-  const health = ratio === null ? "flat" : ratio < guardLine ? "below" : ratio < guardLine * 1.5 ? "near" : "healthy";
-  const lastCheck = events?.filter((e) => e.name === "GuardChecked" && e.version === CURRENT.version).at(-1);
   const inside = new Set(live?.markets.map((x) => x.pool.toLowerCase()) ?? []);
   const names = live?.markets.map((x) => marketOf(x.pool)) ?? [];
-  const caps = live ? [...new Set(live.markets.map((x) => usd(x.cap, 0)))] : [];
-
-  // The hero is one sentence a trader can check against the chain.
-  const sentence = !live || !m
-    ? "Reading the paddock from Hideki…"
-    : status === "revoked"
-      ? "The owner revoked every agent. Nothing can trade this account through Halter until the paddock is set again."
-      : status === "expired"
-        ? `The paddock expired on ${dateOf(m.expiresAt)}. The agent can't open anything new.`
-        : `Your agent can trade ${list(names)}, up to ${caps.length === 1 ? `${caps[0]} each` : list(caps)}, at no more than ${m.maxLeverageX100 / 100}× leverage${m.expiresAt ? `, until ${dateOf(m.expiresAt)}` : ""}.`;
+  const lastCheck = events?.filter((e) => e.name === "GuardChecked" && e.version === CURRENT.version).at(-1);
+  const recent = useMemo(() => (events ? toRows(events).slice(0, 5) : []), [events]);
+  const outside = Object.keys(MARKETS).length - inside.size;
 
   return (
     <>
-      <header className="head">
-        <div>
-          <h1 className="hero-sentence">{sentence}</h1>
-          <p>
-            That's its paddock: Halter {CURRENT.version} checks every order on chain before it reaches dreamDEX for account{" "}
-            <a className="mono" href={`${EXPLORER}/address/${OWNER}`} target="_blank" rel="noreferrer">{short(OWNER)}</a>.
-          </p>
-        </div>
-        {status === "open" && <span className="chip ok"><IconCheck /> Agent trading</span>}
-        {status === "revoked" && <span className="chip risk"><IconStop /> Revoked</span>}
-        {status === "expired" && <span className="chip risk"><IconStop /> Expired</span>}
-        {status === "no-agent" && <span className="chip quiet">No agent allowed</span>}
-      </header>
+      {error && !live && <div className="notice risk" role="alert" style={{ marginTop: 24 }}>Couldn't read Hideki: {error}. Retrying every 10 seconds.</div>}
 
-      {error && !live && <div className="notice risk" role="alert" style={{ marginBottom: 18 }}>Couldn't read Hideki: {error}. Retrying every 10 seconds.</div>}
-
-      <div className="grid">
-        {/* 1. health against the guard line: the one number that can change on its own */}
-        <section className="panel span-7" aria-labelledby="h-health">
-          <h2 id="h-health">Margin health and the guard line</h2>
-          <div className="stats">
-            <div className="stat"><span className="k">Equity</span><span className={`v num ${live ? "" : "skeleton"}`}>{live ? usd(live.equity) : "$000.00"}</span></div>
-            <div className="stat"><span className="k">Maintenance margin</span><span className={`v num ${live ? "" : "skeleton"}`}>{live ? usd(live.mmReq) : "$0.00"}</span></div>
-            <div className="stat"><span className="k">Health</span><span className="v num">{ratio === null ? "—" : `${ratio.toLocaleString("en-US", { maximumFractionDigits: 1 })}×`}</span></div>
+      <div className="deck">
+        <section className="plate dial" aria-labelledby="h-health">
+          <span className="screw l">+</span><span className="screw r">+</span>
+          <div className="plate-head"><span className="eng" id="h-health">Margin health · log scale</span>
+            {m && m.guardHealthBps >= DEMO_GUARD_BPS && <span className="tag demo">Demo guard line</span>}</div>
+          <Dial ratio={ratio} line={line} />
+          <div className="readouts">
+            <div><div className="eng dim">Equity</div><div className={`v num ${live ? "" : "skeleton"}`}>{live ? usd(live.equity) : "$000.00"}</div></div>
+            <div><div className="eng dim">Maintenance</div><div className={`v num ${live ? "" : "skeleton"}`}>{live ? usd(live.mmReq) : "$0.00"}</div></div>
+            <div><div className="eng dim">Reactivity sub</div><div className="v clay num">{SUBSCRIPTION_ID}</div></div>
           </div>
-
-          {health === "flat" ? (
-            <p className="muted" style={{ marginTop: 18 }}>No open position, so the guard has nothing to protect right now.</p>
-          ) : (
-            <>
-              <div className="gauge" role="img" aria-label={`Health ${ratio?.toFixed(1)} times maintenance; guard line at ${guardLine} times`}>
-                <div className="gauge-track" />
-                <div className="gauge-line" style={{ left: `${pos(guardLine)}%` }}><span>guard line {guardLine}×</span></div>
-                <div className="gauge-dot" style={{ left: `${pos(ratio ?? 1)}%` }} />
-              </div>
-              <div className="gauge-scale"><span>1×</span><span>10×</span><span>200×</span></div>
-            </>
-          )}
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}>
-            {health === "healthy" && <span className="chip ok"><IconCheck /> Healthy</span>}
-            {health === "near" && <span className="chip warn">Near the guard line</span>}
-            {health === "below" && <span className="chip risk">Below the line: the next epoch reduces it</span>}
-            {m && m.guardHealthBps >= DEMO_GUARD_BPS && <span className="chip demo">Demo guard line</span>}
-            <span className="chip clay"><IconPulse /> Somnia Reactivity · subscription {SUBSCRIPTION_ID}</span>
-          </div>
-          <p className="muted" style={{ fontSize: 14, margin: "12px 0 0" }}>
-            Every epoch (about 5 minutes) the chain itself calls Halter, which cuts any position below the line by{" "}
-            {m ? m.guardReduceBps / 100 : "…"}%. No keeper, and no bot has to be running.
+          <p className="note">
+            {ratio === null ? "No open position, so there's nothing for the guard to cut. " : ""}
+            Every epoch (~5 min) the chain itself calls Halter; below the guard line it cuts the position by {m ? m.guardReduceBps / 100 : "…"}%.
             {lastCheck ? ` Last check ${ago(lastCheck.time)}, epoch ${lastCheck.args.epoch}.` : ""}
           </p>
         </section>
 
-        {/* 2. how much: limits with how much of each is used */}
-        <section className="panel span-5" aria-labelledby="h-limits">
-          <h2 id="h-limits">How much</h2>
-          {!live && <div className="skeleton" style={{ height: 120 }} />}
+        <section className="plate" aria-labelledby="h-paddock">
+          <span className="screw l">+</span><span className="screw r">+</span>
+          <div className="plate-head">
+            <span className="eng" id="h-paddock">Paddock · Halter {CURRENT.version}</span>
+            <span className={`tag ${!live ? "owner" : live.revoked || expired ? "block" : "ok"}`}>
+              {!live ? "Reading" : live.revoked ? "Revoked" : expired ? "Expired" : "Agent trading"}
+            </span>
+          </div>
+          <h1 className="sentence">
+            {!live ? "Reading the paddock from Hideki…" : live.revoked
+              ? <>Every agent is stopped. Nothing trades this account through Halter until the owner reopens the paddock.</>
+              : <>Agent may trade {names.map((n, i) => <span key={n}>{i ? " and " : ""}<b>{n}</b></span>)}. {outside} other markets are locked out.</>}
+          </h1>
+          {!live && <div className="skeleton" style={{ height: 80 }} />}
           {live?.markets.map((mk) => {
             const used = mk.mark ? notional(mk.size, mk.mark, mk.oneBase) : 0n;
             const pct = mk.cap > 0n ? Math.min(100, Number((used * 10_000n) / mk.cap) / 100) : 0;
             const side = mk.size > 0n ? "long" : mk.size < 0n ? "short" : "";
             return (
-              <div className="limit" key={mk.pool}>
-                <div className="limit-row"><b>{marketOf(mk.pool)}</b><span className="num">{usd(used, 0)} <span className="muted">of {usd(mk.cap, 0)}</span></span></div>
-                <div className="bar" aria-hidden="true"><i style={{ width: `${pct}%` }} /></div>
-                {side && <div className="muted num small">{side} {baseAmount(mk.size < 0n ? -mk.size : mk.size, mk.oneBase)} {marketOf(mk.pool)}{mk.mark === null ? " · mark price stale" : ""}</div>}
+              <div className="cap" key={mk.pool}>
+                <span className="eng" style={{ color: "var(--text)" }}>{marketOf(mk.pool)}</span>
+                <div className="track" aria-label={`${pct.toFixed(0)}% of cap used`}><i style={{ width: `${pct}%` }} /></div>
+                <span className="readout num">{usd(used, 0)} / {usd(mk.cap, 0)}</span>
+                {side && <small className="mono dim">{side} {baseAmount(mk.size < 0n ? -mk.size : mk.size, mk.oneBase)} {marketOf(mk.pool)}{mk.mark === null ? " · mark stale" : ""}</small>}
               </div>
             );
           })}
           {m && (
-            <dl className="rules num">
-              <dt>Account leverage</dt><dd>up to {m.maxLeverageX100 / 100}×</dd>
-              <dt>Loss allowed per day</dt><dd>{usd(m.dailyLossCap, 0)}</dd>
-              <dt>Paddock ends</dt><dd>{m.expiresAt ? new Date(m.expiresAt * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "never"}</dd>
-            </dl>
+            <div className="specs">
+              <div><span className="eng dim">Leverage</span><b className="num">{m.maxLeverageX100 / 100}×</b></div>
+              <div><span className="eng dim">Loss / day</span><b className="num">{usd(m.dailyLossCap, 0)}</b></div>
+              <div><span className="eng dim">Closes</span><b>{m.expiresAt ? dateOf(m.expiresAt) : "Never"}</b></div>
+            </div>
           )}
-        </section>
-
-        {/* 3. where: every dreamDEX market, fenced ones lit (default deny made visible) */}
-        <section className="panel span-12" aria-labelledby="h-where">
-          <h2 id="h-where">Where</h2>
-          <ul className="fence" aria-label="dreamDEX perp markets">
-            {Object.entries(MARKETS).map(([pool, sym]) => {
-              const isIn = inside.has(pool);
-              return (
-                <li key={pool} className={isIn ? "in" : "out"}>
-                  <span>{sym}</span>
-                  <small>{isIn ? "inside" : "blocked"}</small>
-                </li>
-              );
-            })}
-          </ul>
-          <p className="muted" style={{ fontSize: 14, margin: "14px 0 0" }}>
-            Linking a bot on dreamDEX opens all {Object.keys(MARKETS).length} markets to it. Halter narrows that to {inside.size || "the ones you choose"},
-            each checked against dreamDEX's own pool factory, so an order anywhere else is blocked and recorded.
+          <div className="board" role="list" aria-label="dreamDEX perp markets">
+            {Object.entries(MARKETS).map(([pool, sym]) => (
+              <div role="listitem" key={pool} className={`key ${inside.has(pool) ? "open" : ""}`}>{sym}<small>{inside.has(pool) ? "OPEN" : "LOCKED"}</small></div>
+            ))}
+          </div>
+          <p className="note">
+            Linking a bot on dreamDEX opens all {Object.keys(MARKETS).length} markets. Halter narrows it to these, each checked against dreamDEX's pool factory, for account{" "}
+            <a className="mono" href={`${EXPLORER}/address/${OWNER}`} target="_blank" rel="noreferrer">{short(OWNER)}</a>.
           </p>
         </section>
-
-        {/* 4. who */}
-        <section className="panel span-12" aria-labelledby="h-who">
-          <h2 id="h-who">Who</h2>
-          <div className="agent">
-            <div>
-              <b>Agent key</b>{" "}
-              <a className="mono" href={`${EXPLORER}/address/${AGENT}`} target="_blank" rel="noreferrer">{short(AGENT, 6)}</a>
-              <div className="muted small">Can place, cancel and reduce orders through Halter. It can't withdraw, and it never holds the account's own link.</div>
-            </div>
-            {live && (live.agentAllowed && !live.revoked
-              ? <span className="chip ok"><IconCheck /> Allowed{m?.expiresAt ? ` until ${dateOf(m.expiresAt)}` : ""}</span>
-              : <span className="chip risk"><IconStop /> Stopped</span>)}
-          </div>
-        </section>
       </div>
+
+      <section className="tape" aria-labelledby="h-latest">
+        <div className="tape-head"><span className="eng" id="h-latest">Latest on the tape</span><a className="eng dim" href="#activity">All activity</a></div>
+        {!status.ok && <p className="dim mono" style={{ padding: "0 4px 12px" }}>Activity history unavailable ({status.error}). Everything above is read straight from chain.</p>}
+        {events === null && status.ok && <div className="skeleton" style={{ height: 90, margin: "0 4px 12px" }} />}
+        <Tape rows={recent} />
+      </section>
     </>
   );
 }

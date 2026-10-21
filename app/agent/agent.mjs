@@ -8,7 +8,7 @@
 //
 // Needs ANTHROPIC_API_KEY in ~/halter/.env (never committed, never pasted in chat).
 import Anthropic from "@anthropic-ai/sdk";
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { decodeEventLog, parseAbi, parseEther, formatEther } from "viem";
 import { env, ADDR, pub, owner, agent, wallet, halterArtifact, poolAbi, bankAbi, loadDeployment } from "../scripts/lib.mjs";
 
@@ -292,7 +292,26 @@ async function cycle(note) {
     if (s.tool) console.log(`  - ${s.tool}(${JSON.stringify(s.input)})${s.error ? ` FAILED ${s.error}` : s.tool === "place_order" || s.tool === "close_position" ? ` => ${JSON.stringify(s.result)}` : ""}`);
     if (s.refusal) console.log(`  refused: ${JSON.stringify(s.refusal)}`);
   }
+  await pushRuns();
   console.log(`\n  ${log.orders.length} order(s), ${log.usage.input} in / ${log.usage.output} out tokens, ~$${log.cost_usd}`);
+}
+
+// Send recent cycles to the hosted app, if one is configured. Failures never stop trading.
+async function pushRuns() {
+  if (!env.HALTER_INGEST_URL || !env.HALTER_INGEST_TOKEN) return;
+  try {
+    const dir = new URL("./runs/", import.meta.url);
+    const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort().slice(-60);
+    const runs = files.map((f) => JSON.parse(readFileSync(new URL(f, dir), "utf8")));
+    const r = await fetch(env.HALTER_INGEST_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${env.HALTER_INGEST_TOKEN}` },
+      body: JSON.stringify(runs),
+    });
+    if (!r.ok) console.error(`push to app failed: ${r.status}`);
+  } catch (e) {
+    console.error("push to app failed:", e.message);
+  }
 }
 
 const [mode = "once", arg] = process.argv.slice(2);

@@ -169,3 +169,32 @@ export function stats(events: RawEvent[]) {
     pairs: n("PairPlaced"),
   };
 }
+
+// ---------- the agent's decision cycles (reasoning is off chain; orders link to chain) ----------
+export type AgentRun = {
+  started: string; finished?: string; model: string; note: string | null; cost_usd?: number;
+  steps: { say?: string; tool?: string; input?: Record<string, unknown>; result?: any; error?: string }[];
+  orders: { result: string; reason?: string; tx?: string; market?: string }[];
+};
+
+export function useAgentRuns(intervalMs = 30_000) {
+  const [runs, setRuns] = useState<AgentRun[] | null>(null);
+  const [status, setStatus] = useState<{ ok: boolean; error?: string }>({ ok: true });
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      try {
+        const r = await fetch("/api/agent", { cache: "no-store" });
+        if (!r.ok) throw new Error(`agent log answered ${r.status}`);
+        const j = await r.json();
+        if (!stop) { setRuns(j.runs); setStatus({ ok: true }); }
+      } catch (e) {
+        if (!stop) setStatus({ ok: false, error: (e as Error).message });
+      }
+    };
+    tick();
+    const id = setInterval(tick, intervalMs);
+    return () => { stop = true; clearInterval(id); };
+  }, [intervalMs]);
+  return { runs, status };
+}

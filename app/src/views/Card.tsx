@@ -57,33 +57,32 @@ export function CardView({ live, events }: { live: LiveState | null; events: Raw
 
   return (
     <>
-      <header className="head">
-        <div>
-          <h1>Show your paddock</h1>
-          <p>Built from Halter's own events on Hideki, so every number on the card can be checked on chain.</p>
-        </div>
-      </header>
+      <section className="plate" style={{ marginTop: 24 }}>
+        <span className="screw l">+</span><span className="screw r">+</span>
+        <span className="eng">Card · built from Halter's own events on Hideki</span>
+        <h1 className="sentence" style={{ marginBottom: 6 }}>Show your paddock. Every number on it can be checked on chain.</h1>
+      </section>
 
       <div className="card-wrap">
         <svg ref={svgRef} className="card-svg" viewBox="0 0 1200 675" xmlns="http://www.w3.org/2000/svg" role="img"
           aria-label={`Halter card: ${s?.allowed ?? 0} orders allowed, ${s?.blocked ?? 0} blocked, ${s?.checks ?? 0} guard checks`}>
-          <rect width="1200" height="675" fill="#1C1A17" />
+          <rect width="1200" height="675" fill="#14120F" /><rect x="10" y="10" width="1180" height="655" rx="8" fill="none" stroke="#C9A46A" strokeOpacity=".18" />
           <g transform="translate(64 54) scale(0.15)">
             <path d="M158 232 Q 256 336 354 232" fill="none" stroke="#D9895B" strokeWidth="26" strokeLinecap="round" />
             <circle cx="256" cy="318" r="30" fill="none" stroke="#D9895B" strokeWidth="20" />
             <rect x="136" y="112" width="44" height="288" rx="22" fill="#F2EBDD" />
             <rect x="332" y="112" width="44" height="288" rx="22" fill="#F2EBDD" />
           </g>
-          <text x="144" y="100" fill="#F2EBDD" fontFamily={SERIF} fontSize="32">Halter</text>
+          <text x="144" y="100" fill="#C9A46A" fontFamily={SERIF} fontSize="32">Halter</text>
           <text x="72" y="214" fill="#F6F1E7" fontFamily={SERIF} fontSize="56">My agent trades inside a paddock.</text>
           {lines.map((l, i) => (
-            <text key={i} x="72" y={270 + i * 36} fill="#B9B0A0" fontFamily={SANS} fontSize="24">{l}</text>
+            <text key={i} x="72" y={270 + i * 36} fill="#C9A46A" fontFamily={SANS} fontSize="24">{l}</text>
           ))}
           {tiles.map((t, i) => (
             <g key={t.k} transform={`translate(${72 + i * 270} 400)`}>
-              <rect width="246" height="160" rx="18" fill="#2A2723" />
-              <text x="24" y="86" fill={t.accent ? "#E9A27A" : "#F6F1E7"} fontFamily={SERIF} fontSize="64">{t.v ?? "–"}</text>
-              <text x="24" y="128" fill="#B9B0A0" fontFamily={SANS} fontSize="19">{t.k}</text>
+              <rect width="246" height="160" rx="18" fill="#1F1B16" stroke="#3A342B" />
+              <text x="24" y="86" fill={t.accent ? "#E07A45" : "#EDE4D3"} fontFamily={SERIF} fontSize="64">{t.v ?? "–"}</text>
+              <text x="24" y="128" fill="#C9A46A" fontFamily={SANS} fontSize="19">{t.k}</text>
             </g>
           ))}
           <text x="72" y="622" fill="#857D70" fontFamily={SANS} fontSize="17">

@@ -16,3 +16,4 @@ app/dist/
 .claude/
 app/agent/data/
 app/agent/runs/
+design/

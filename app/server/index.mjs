@@ -3,7 +3,7 @@
 // history needs a cache; live state is still read from chain in the browser.
 //   PORT=8787 node server/index.mjs
 import http from "node:http";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, readdirSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPublicClient, http as viemHttp, decodeEventLog } from "viem";
@@ -89,6 +89,28 @@ async function loop() {
   setTimeout(loop, 4000);
 }
 
+// ---- agent decision cycles: read from the agent's run folder when it runs on this
+// machine, or pushed by the agent with INGEST_TOKEN when the app is hosted elsewhere ----
+const RUNS_DIR = process.env.AGENT_RUNS_DIR ?? join(here, "..", "agent", "runs");
+const INGEST_TOKEN = process.env.INGEST_TOKEN ?? "";
+const pushedFile = join(DATA, "agent-runs.json");
+let pushed = existsSync(pushedFile) ? JSON.parse(readFileSync(pushedFile, "utf8")) : [];
+function agentRuns() {
+  const local = existsSync(RUNS_DIR)
+    ? readdirSync(RUNS_DIR).filter((f) => f.endsWith(".json")).map((f) => { try { return JSON.parse(readFileSync(join(RUNS_DIR, f), "utf8")); } catch { return null; } }).filter(Boolean)
+    : [];
+  const byStart = new Map([...pushed, ...local].map((r) => [r.started, r]));
+  return [...byStart.values()].sort((a, b) => (a.started < b.started ? 1 : -1)).slice(0, 200);
+}
+function readBody(req, limit = 2_000_000) {
+  return new Promise((ok, fail) => {
+    let size = 0, raw = "";
+    req.on("data", (d) => { size += d.length; if (size > limit) { fail(new Error("too large")); req.destroy(); } else raw += d; });
+    req.on("end", () => ok(raw));
+    req.on("error", fail);
+  });
+}
+
 // ---- http ----
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json", ".woff2": "font/woff2" };
 http.createServer((req, res) => {
@@ -97,6 +119,22 @@ http.createServer((req, res) => {
     const behind = HALTERS.map((h) => Number(head - BigInt(state.scanned[h.address])));
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": "no-store" });
     return res.end(JSON.stringify({ head: Number(head), behind: Math.max(...behind), error: lastError, events: state.events }));
+  }
+  if (url.pathname === "/api/agent" && req.method === "GET") {
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    return res.end(JSON.stringify({ runs: agentRuns() }));
+  }
+  if (url.pathname === "/api/agent" && req.method === "POST") {
+    if (!INGEST_TOKEN || req.headers.authorization !== `Bearer ${INGEST_TOKEN}`) { res.writeHead(401); return res.end("unauthorized"); }
+    readBody(req).then((raw) => {
+      const runs = JSON.parse(raw);
+      if (!Array.isArray(runs) || !runs.every((r) => typeof r?.started === "string" && Array.isArray(r.steps) && Array.isArray(r.orders))) throw new Error("bad shape");
+      const byStart = new Map([...pushed, ...runs].map((r) => [r.started, r]));
+      pushed = [...byStart.values()].sort((a, b) => (a.started < b.started ? 1 : -1)).slice(0, 200);
+      writeFileSync(pushedFile, JSON.stringify(pushed));
+      res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ stored: pushed.length }));
+    }).catch((e) => { res.writeHead(400); res.end(String(e.message)); });
+    return;
   }
   if (url.pathname === "/api/health") {
     res.writeHead(200, { "content-type": "application/json" });

@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
-import { useEvents, useLive } from "./data";
-import { IconActivity, IconCard, IconMandate } from "./icons";
+import { useAgentRuns, useEvents, useLive } from "./data";
 import { PaddockView } from "./views/Paddock";
 import { ActivityView } from "./views/Activity";
+import { AgentView } from "./views/Agent";
 import { CardView } from "./views/Card";
 
 const TABS = [
-  { id: "paddock", label: "Paddock", icon: <IconMandate /> },
-  { id: "activity", label: "Activity", icon: <IconActivity /> },
-  { id: "card", label: "Card", icon: <IconCard /> },
+  { id: "paddock", label: "Paddock" },
+  { id: "activity", label: "Activity" },
+  { id: "agent", label: "Agent" },
+  { id: "card", label: "Card" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
@@ -21,6 +22,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>(fromHash);
   const { live, error } = useLive();
   const { events, status } = useEvents();
+  const agent = useAgentRuns();
 
   useEffect(() => {
     const on = () => setTab(fromHash());
@@ -29,33 +31,28 @@ export default function App() {
   }, []);
   const go = (t: Tab) => { window.location.hash = t; setTab(t); };
 
-  const tabButtons = (cls: string) =>
-    TABS.map((t) => (
-      <button key={t.id} role="tab" className={cls} aria-selected={tab === t.id} aria-controls="view" onClick={() => go(t.id)}>
-        {cls === "rail-tab" && t.icon}
-        <span>{t.label}</span>
-      </button>
-    ));
-
   return (
-    <div className="shell">
-      <nav className="rail" aria-label="Halter">
-        <a className="rail-logo" href="#paddock" onClick={() => go("paddock")}>
+    <div className="wrap">
+      <header className="bar">
+        <a className="brand" href="#paddock" onClick={() => go("paddock")}>
           <img src="/halter-logo.svg" alt="" />
-          <span>Halter</span>
+          Halter
         </a>
-        <div role="tablist" aria-orientation="vertical" style={{ display: "grid", gap: 4 }}>{tabButtons("rail-tab")}</div>
-        <div className="rail-foot">
-          <span className="dot" style={{ background: live ? "#7fb08d" : error ? "#d27a66" : "#8f8676" }} />
-          <span className="label">{live ? `Hideki · block ${live.block.toLocaleString()}` : error ? "Hideki unreachable" : "Connecting to Hideki"}</span>
+        <nav className="tabs" role="tablist" aria-label="Halter">
+          {TABS.map((t) => (
+            <button key={t.id} role="tab" aria-selected={tab === t.id} aria-controls="view" onClick={() => go(t.id)}>{t.label}</button>
+          ))}
+        </nav>
+        <div className="status" role="status">
+          <span className="eng dim">{live ? `Hideki · block ${live.block.toLocaleString()}` : error ? "Hideki unreachable" : "Connecting"}</span>
+          <span className={`led ${live ? "on" : error ? "off" : ""}`} aria-hidden="true" />
         </div>
-      </nav>
+      </header>
 
-      <div className="mobile-tabs" role="tablist" aria-label="Halter">{tabButtons("mobile-tab")}</div>
-
-      <main className="main" id="view" role="tabpanel">
-        {tab === "paddock" && <PaddockView live={live} error={error} events={events} />}
+      <main id="view" role="tabpanel">
+        {tab === "paddock" && <PaddockView live={live} error={error} events={events} status={status} />}
         {tab === "activity" && <ActivityView events={events} status={status} />}
+        {tab === "agent" && <AgentView runs={agent.runs} status={agent.status} />}
         {tab === "card" && <CardView live={live} events={events} />}
       </main>
     </div>
