@@ -116,6 +116,7 @@ async function readMarket({ market }) {
     mark_price: i.ok ? usd(i.mark) : "stale",
     best_bid: i.bids[0] ? usd(i.bids[0].price) : null,
     best_ask: i.asks[0] ? usd(i.asks[0].price) : null,
+    mid_price: i.bids[0] && i.asks[0] ? Number(((usd(i.bids[0].price) + usd(i.asks[0].price)) / 2).toFixed(4)) : null,
     funding_rate_raw: i.funding?.toString() ?? null,
     min_order_usd: i.ok ? Number(((Number(i.book.minQuantity) / Number(i.oneBase)) * usd(i.mark)).toFixed(2)) : null,
     recent_marks: history.map(([t, p]) => ({ minutes_ago: Math.round((Date.now() - t) / 60000), price: p })),
@@ -205,11 +206,17 @@ const tools = [
 const SYSTEM = `You trade a dreamDEX perpetual futures account on Somnia's Hideki testnet (paper USDso, no real money).
 You never hold the account's keys. Every order goes through Halter, a contract that enforces the owner's paddock on chain: allowed markets, a notional cap per market, an account leverage cap, a daily loss cap, and an end date. Orders outside the paddock are refused on chain and recorded.
 
+Your strategy (small, rule-based, explainable):
+- Use read_market's recent_marks (one sample per cycle, newest last) and mid_price. A trend is "up" when the last 3 samples each rise and the latest mid is above the oldest of them; "down" is the mirror; anything else is "flat".
+- No position and a clear up or down trend: open one position in that direction for 15 to 25 USD with a market order. At most one new position per cycle, and never more than the paddock allows.
+- Holding a position: close it with close_position when it is about +1% in profit or -1% in loss against entry_price (use mid_price), or when the trend has turned against it.
+- Fewer than 3 recorded samples, or a flat trend: do nothing and say what you are waiting for.
+- On this testnet the order book usually sits a few tenths of a percent away from the mark price. That gap is normal here; judge entries and exits on mid_price, not on the gap.
+
 Each cycle:
-1. Call read_paddock, then read_market for the markets you are considering.
-2. Decide: open, add, reduce, close, or do nothing. Doing nothing is often right. Keep positions small relative to the caps and never chase a move you can't explain from the data.
-3. Preview before you place. Respect the paddock; if the operator asks for something outside it, explain that Halter will refuse it rather than looking for a way around.
-4. Finish with a short plain summary: what you saw, what you did, and why.`;
+1. Call read_paddock, then read_market for BTC and ETH.
+2. Apply the strategy. Preview before you place. Respect the paddock; if the operator asks for something outside it, explain that Halter will refuse it rather than looking for a way around.
+3. Finish with a short plain summary: what you saw, what you did, and why.`;
 
 // Hideki sometimes answers a read with a transient error whose "data" is null, which
 // viem then fails to format. Reads are safe to retry; orders are never retried here,
@@ -245,7 +252,8 @@ async function cycle(note) {
   // record marks for the allowed markets so later cycles see a trend
   for (const sym of ["BTC", "ETH"]) {
     const i = await marketInfo(sym).catch(() => null);
-    if (i?.ok) (marks[sym] ??= []).push([Date.now(), usd(i.mark)]), (marks[sym] = marks[sym].slice(-48));
+    const mid = i?.bids[0] && i?.asks[0] ? (usd(i.bids[0].price) + usd(i.asks[0].price)) / 2 : i?.ok ? usd(i.mark) : null;
+    if (mid !== null) (marks[sym] ??= []).push([Date.now(), Number(mid.toFixed(4))]), (marks[sym] = marks[sym].slice(-48));
   }
   writeFileSync(marksFile, JSON.stringify(marks));
 
