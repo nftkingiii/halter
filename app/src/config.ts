@@ -2,16 +2,55 @@
 export const RPC_URL = "https://api.hideki2.infra.testnet.somnia.network";
 export const EXPLORER = "https://explorer.testnet.somnia.network/tokyo";
 
-export type HalterDeployment = { version: "v1" | "v2"; address: `0x${string}`; deployBlock: number; current: boolean };
+export type HalterDeployment = { version: "v1" | "v2" | "keyless"; address: `0x${string}`; deployBlock: number };
 
 export const HALTERS: HalterDeployment[] = [
-  { version: "v2", address: "0xc904a9ac96bfda2989ead531bc57fd8d5ee56b06", deployBlock: 29119837, current: true },
-  { version: "v1", address: "0x24bd6b71f27c7aad65fb9842c6181b65b571a833", deployBlock: 29099189, current: false },
+  { version: "keyless", address: "0xb4Ae094b053B2E6B1E572281d245368D8269E55b", deployBlock: 29507000 },
+  { version: "v2", address: "0xc904a9ac96bfda2989ead531bc57fd8d5ee56b06", deployBlock: 29119837 },
+  { version: "v1", address: "0x24bd6b71f27c7aad65fb9842c6181b65b571a833", deployBlock: 29099189 },
 ];
-export const CURRENT = HALTERS.find((h) => h.current)!;
-export const SUBSCRIPTION_ID = "14557199";
 
-export const OWNER = "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580" as const;
+/** The dreamDEX accounts the app can show. Wallet 1 is a real dreamDEX app wallet. */
+export type Account = {
+  id: "wallet1" | "test";
+  label: string;
+  note: string;
+  owner: `0x${string}`;
+  halter: `0x${string}`;
+  halterLabel: string;
+  versions: HalterDeployment["version"][];
+  subscriptionId: string | null;
+  admin: `0x${string}` | null;
+};
+export const ADMIN_KEY = "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580" as const;
+export const ACCOUNTS: Account[] = [
+  {
+    id: "wallet1",
+    label: "Wallet 1",
+    note: "a dreamDEX app wallet, linked through Link a Bot to a keyless operator",
+    owner: "0x0B2BdDB6D30c30f3923DDEb2EE875d025bc42034",
+    halter: "0xb4Ae094b053B2E6B1E572281d245368D8269E55b",
+    halterLabel: "keyless operator",
+    versions: ["keyless"],
+    subscriptionId: null,
+    admin: ADMIN_KEY,
+  },
+  {
+    id: "test",
+    label: "Test account",
+    note: "a test key that linked Halter directly through the operator registry",
+    owner: ADMIN_KEY,
+    halter: "0xc904a9ac96bfda2989ead531bc57fd8d5ee56b06",
+    halterLabel: "Halter v2",
+    versions: ["v2", "v1"],
+    subscriptionId: "14557199",
+    admin: null,
+  },
+];
+export const accountById = (id: string | null) => ACCOUNTS.find((a) => a.id === id) ?? ACCOUNTS[0];
+export const halterAddresses = (acct: Account) =>
+  HALTERS.filter((h) => acct.versions.includes(h.version)).map((h) => h.address.toLowerCase());
+
 export const AGENT = "0xFB3f3e9f86aeEDbC68dc0d4fa26eA7896c37800B" as const;
 export const MARGIN_BANK = "0x478769E1177C0773c43A593DCCc4Ad15F15F1394" as const;
 export const FACTORY = "0xE631fAEE547baeE07353E290f0562ea67d856560" as const;
@@ -47,9 +86,10 @@ export const marketOf = (pool: string) => MARKETS[pool.toLowerCase()] ?? `${pool
 export const DEMO_GUARD_BPS = 100_000;
 
 export const short = (a: string, n = 4) => `${a.slice(0, 2 + n)}…${a.slice(-n)}`;
-export const who = (a: string) => {
+export const who = (a: string, acct?: Account) => {
   const l = a.toLowerCase();
-  if (l === OWNER.toLowerCase()) return "Owner";
+  if (acct && l === acct.owner.toLowerCase()) return acct.id === "wallet1" ? "Wallet 1" : "Owner";
+  if (acct?.admin && l === acct.admin.toLowerCase()) return "Admin";
   if (l === AGENT.toLowerCase()) return "Agent key";
   if (l === PRECOMPILE) return "Somnia Reactivity";
   return short(a);

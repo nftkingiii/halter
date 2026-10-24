@@ -165,7 +165,13 @@ async function sendOrder(sym, order, oneBase, input, log) {
   const blocked = evs.find((e) => e.eventName === "OrderBlocked");
   const out = blocked
     ? { result: "blocked on chain by Halter", reason: REASONS[Number(blocked.args.reason)], tx: hash }
-    : { result: "placed", order_id: evs.find((e) => e.eventName === "OrderAllowed")?.args.orderId.toString(), market: sym, quantity: Number(order.quantity) / Number(oneBase), price: usd(order.price), tx: hash };
+    : {
+        result: "placed", order_id: evs.find((e) => e.eventName === "OrderAllowed")?.args.orderId.toString(), market: sym,
+        quantity: Number(order.quantity) / Number(oneBase),
+        // The worst price this order would accept, not the fill: the book sets the fill,
+        // and it shows up as entry_price in read_paddock next cycle.
+        limit_price: usd(order.price), tx: hash,
+      };
   log.orders.push({ input, ...out });
   return out;
 }
@@ -212,6 +218,7 @@ Your strategy (small, rule-based, explainable):
 - Holding a position: close it with close_position when it is about +1% in profit or -1% in loss against entry_price (use mid_price), or when the trend has turned against it.
 - Fewer than 3 recorded samples, or a flat trend: do nothing and say what you are waiting for.
 - On this testnet the order book usually sits a few tenths of a percent away from the mark price. That gap is normal here; judge entries and exits on mid_price, not on the gap.
+- A placed order reports limit_price: the worst price it would accept, not the price it filled at. Don't describe it as the fill. The real entry shows up as entry_price in read_paddock next cycle.
 
 Each cycle:
 1. Call read_paddock, then read_market for BTC and ETH.

@@ -1,25 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import { readLive, type LiveState } from "./chain";
-import { marketOf, ONE_BASE, REASONS, REASON_TEXT, DEMO_GUARD_BPS, who } from "./config";
+import { marketOf, ONE_BASE, REASONS, REASON_TEXT, DEMO_GUARD_BPS, who, halterAddresses, type Account } from "./config";
 
 // ---------- live chain state ----------
-export function useLive(intervalMs = 10_000) {
+export function useLive(acct: Account, intervalMs = 10_000) {
   const [live, setLive] = useState<LiveState | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let stop = false;
     const tick = async () => {
       try {
-        const s = await readLive();
+        const s = await readLive(acct);
         if (!stop) { setLive(s); setError(null); }
       } catch (e) {
         if (!stop) setError((e as Error).message.split("\n")[0]);
       }
     };
+    setLive(null);
     tick();
     const id = setInterval(tick, intervalMs);
     return () => { stop = true; clearInterval(id); };
-  }, [intervalMs]);
+  }, [acct.id, intervalMs]);
   return { live, error };
 }
 
@@ -72,7 +73,14 @@ const usdOf = (q: string, p: string, pool: string) => {
 };
 
 /** One readable line per Halter event. Pair legs fold into their PairPlaced row. */
-export function toRows(events: RawEvent[]): Row[] {
+/** The events of one account's Halter deployments. */
+export const forAccount = (events: RawEvent[] | null, acct: Account) => {
+  if (!events) return null;
+  const mine = new Set(halterAddresses(acct));
+  return events.filter((e) => mine.has(e.halter.toLowerCase()));
+};
+
+export function toRows(events: RawEvent[], acct: Account): Row[] {
   const pairTx = new Set(events.filter((e) => e.name === "PairPlaced").map((e) => e.tx));
   const rows: Row[] = [];
   // Previous owner settings per Halter, so owner rows can say what changed.
@@ -87,19 +95,19 @@ export function toRows(events: RawEvent[]): Row[] {
       case "OrderAllowed": {
         if (pairTx.has(e.tx)) break;
         const title = a.reducing
-          ? `${who(a.agent)} reduced the ${marketOf(a.pool)} ${a.isBid ? "short" : "long"}`
-          : `${who(a.agent)} placed a ${marketOf(a.pool)} ${a.isBid ? "bid" : "ask"}`;
+          ? `${who(a.agent, acct)} reduced the ${marketOf(a.pool)} ${a.isBid ? "short" : "long"}`
+          : `${who(a.agent, acct)} placed a ${marketOf(a.pool)} ${a.isBid ? "bid" : "ask"}`;
         rows.push({ ...base, kind: "allowed", title, detail: `${qty(a.quantity, a.pool)} ${marketOf(a.pool)} at ${px(a.price)} · ${usdOf(a.quantity, a.price, a.pool)} · order #${String(a.orderId).slice(0, 6)}…` });
         break;
       }
       case "PairPlaced": {
         const legs = events.filter((x) => x.tx === e.tx && x.name === "OrderAllowed");
-        rows.push({ ...base, kind: "pair", title: `${who(a.agent)} placed a pair: ${legs.map((l) => marketOf(l.args.pool)).join(" + ")}`, detail: `Both legs in one transaction · ${legs.map((l) => `${qty(l.args.quantity, l.args.pool)} ${marketOf(l.args.pool)}`).join(", ")}` });
+        rows.push({ ...base, kind: "pair", title: `${who(a.agent, acct)} placed a pair: ${legs.map((l) => marketOf(l.args.pool)).join(" + ")}`, detail: `Both legs in one transaction · ${legs.map((l) => `${qty(l.args.quantity, l.args.pool)} ${marketOf(l.args.pool)}`).join(", ")}` });
         break;
       }
       case "OrderBlocked": {
         const r = REASONS[Number(a.reason)] ?? String(a.reason);
-        rows.push({ ...base, kind: "blocked", title: `Blocked ${who(a.agent).toLowerCase() === "agent key" ? "the agent's" : `${who(a.agent)}'s`} ${marketOf(a.pool)} ${a.isBid ? "bid" : "ask"}`, detail: `Because ${REASON_TEXT[r] ?? r} · tried ${qty(a.quantity, a.pool)} ${marketOf(a.pool)} (${usdOf(a.quantity, a.price, a.pool)})` });
+        rows.push({ ...base, kind: "blocked", title: `Blocked ${who(a.agent, acct).toLowerCase() === "agent key" ? "the agent's" : `${who(a.agent, acct)}'s`} ${marketOf(a.pool)} ${a.isBid ? "bid" : "ask"}`, detail: `Because ${REASON_TEXT[r] ?? r} · tried ${qty(a.quantity, a.pool)} ${marketOf(a.pool)} (${usdOf(a.quantity, a.price, a.pool)})` });
         break;
       }
       case "GuardFired":
@@ -132,7 +140,8 @@ export function toRows(events: RawEvent[]): Row[] {
           if (prev.guardHealthBps !== m.guardHealthBps) changes.push(`guard line ${line(prev)} → ${line(m)}`);
           if (prev.expiresAt !== m.expiresAt) changes.push("new end date");
         }
-        const title = !prev ? "Owner set up the paddock" : demo ? "Owner set a demo guard line" : changes.length ? "Owner changed the paddock" : "Owner reopened the paddock";
+        const by = acct.admin ? "Admin" : "Owner";
+        const title = !prev ? `${by} set up the paddock` : demo ? `${by} set a demo guard line` : changes.length ? `${by} changed the paddock` : `${by} reopened the paddock`;
         const detail = !prev || !changes.length
           ? `${lev(m)} leverage · ${px(m.dailyLossCap)} a day max loss · guard line ${line(m)} maintenance`
           : changes.join(" · ");
@@ -144,15 +153,19 @@ export function toRows(events: RawEvent[]): Row[] {
         const key = `${e.halter}:${String(a.pool).toLowerCase()}`;
         const prev = lastCap.get(key);
         lastCap.set(key, cap);
-        const title = cap === 0n ? `Owner took ${marketOf(a.pool)} out of the paddock` : prev ? `Owner changed the ${marketOf(a.pool)} cap` : `Owner added ${marketOf(a.pool)} to the paddock`;
+        const by = acct.admin ? "Admin" : "Owner";
+        const title = cap === 0n ? `${by} took ${marketOf(a.pool)} out of the paddock` : prev ? `${by} changed the ${marketOf(a.pool)} cap` : `${by} added ${marketOf(a.pool)} to the paddock`;
         rows.push({ ...base, kind: "owner", title, detail: cap === 0n ? undefined : prev ? `${px(String(prev))} → ${px(a.notionalCap)}` : `Cap ${px(a.notionalCap)}` });
         break;
       }
       case "AgentSet":
-        rows.push({ ...base, kind: "owner", title: `Owner ${a.allowed ? "allowed" : "removed"} ${who(a.agent).toLowerCase()}` });
+        rows.push({ ...base, kind: "owner", title: `${acct.admin ? "Admin" : "Owner"} ${a.allowed ? "allowed" : "removed"} ${who(a.agent, acct).toLowerCase()}` });
+        break;
+      case "AdminSet":
+        rows.push({ ...base, kind: "owner", title: "Halter's code installed and initialised", detail: `EIP-7702 activation · admin ${who(a.admin, acct)}` });
         break;
       case "Revoked":
-        rows.push({ ...base, kind: "owner", title: "Owner revoked every agent", detail: "Agents stop at once until the owner reopens the paddock" });
+        rows.push({ ...base, kind: "owner", title: `${acct.admin ? "Admin" : "Owner"} revoked every agent`, detail: "Agents stop at once until the owner reopens the paddock" });
         break;
     }
   }

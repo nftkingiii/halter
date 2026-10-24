@@ -1,7 +1,7 @@
 // Live state, read straight from Hideki in the browser. No server in this path.
 import { createPublicClient, defineChain, http, parseAbi } from "viem";
 import halterAbi from "./abi/halter.json";
-import { RPC_URL, MARGIN_BANK, OWNER, AGENT, CURRENT } from "./config";
+import { RPC_URL, MARGIN_BANK, AGENT, type Account } from "./config";
 
 export const hideki = defineChain({
   id: 50383,
@@ -19,7 +19,6 @@ const poolAbi = parseAbi([
   "function tryGetMarkPrice() view returns (bool ok, uint256 price)",
   "function getOneBase() view returns (uint256)",
 ]);
-const H = { address: CURRENT.address, abi: halterAbi } as const;
 
 export type Mandate = {
   expiresAt: number;
@@ -42,7 +41,9 @@ export type LiveState = {
   block: bigint;
 };
 
-export async function readLive(): Promise<LiveState> {
+export async function readLive(acct: Account): Promise<LiveState> {
+  const H = { address: acct.halter, abi: halterAbi } as const;
+  const OWNER = acct.owner;
   const [m, revoked, agentAllowed, count, health, block] = await Promise.all([
     client.readContract({ ...H, functionName: "mandate" }) as Promise<readonly [bigint, number, bigint, number, number, number]>,
     client.readContract({ ...H, functionName: "revoked" }) as Promise<boolean>,

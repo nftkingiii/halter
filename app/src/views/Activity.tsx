@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { toRows, type Kind, type RawEvent } from "../data";
+import type { Account } from "../config";
 import { Tape } from "./Tape";
 
 const FILTERS: { id: "all" | "orders" | Kind; label: string }[] = [
@@ -10,9 +11,9 @@ const FILTERS: { id: "all" | "orders" | Kind; label: string }[] = [
   { id: "owner", label: "Owner" },
 ];
 
-export function ActivityView({ events, status }: { events: RawEvent[] | null; status: { ok: boolean; behind: number; error?: string } }) {
+export function ActivityView({ acct, events, status }: { acct: Account; events: RawEvent[] | null; status: { ok: boolean; behind: number; error?: string } }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["id"]>("all");
-  const rows = useMemo(() => (events ? toRows(events) : []), [events]);
+  const rows = useMemo(() => (events ? toRows(events, acct) : []), [events, acct]);
   const shown = rows.filter((r) => filter === "all" || (filter === "orders" ? r.kind === "allowed" || r.kind === "pair" : r.kind === filter));
   const counts = useMemo(() => ({
     blocked: rows.filter((r) => r.kind === "blocked").length,
@@ -23,7 +24,7 @@ export function ActivityView({ events, status }: { events: RawEvent[] | null; st
     <>
       <section className="plate" style={{ marginTop: 24 }}>
         <span className="screw l">+</span><span className="screw r">+</span>
-        <span className="eng">Activity · every Halter event on Hideki</span>
+        <span className="eng">Activity · {acct.label} · every Halter event on Hideki</span>
         <h1 className="sentence" style={{ marginBottom: 6 }}>
           What the agent did, and what it tried: <b>{counts.allowed}</b> orders through, <b>{counts.blocked}</b> stopped at the fence.
         </h1>

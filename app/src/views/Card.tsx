@@ -1,13 +1,13 @@
 import { useRef, useState } from "react";
 import type { LiveState } from "../chain";
-import { CURRENT, marketOf, short } from "../config";
+import { marketOf, short, type Account } from "../config";
 import { stats, type RawEvent } from "../data";
 
 const REPO = "https://github.com/nftkingiii/halter";
 const SERIF = "Georgia, 'Times New Roman', serif"; // system fonts keep the PNG export identical
 const SANS = "Helvetica, Arial, sans-serif";
 
-export function CardView({ live, events }: { live: LiveState | null; events: RawEvent[] | null }) {
+export function CardView({ acct, live, events }: { acct: Account; live: LiveState | null; events: RawEvent[] | null }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [busy, setBusy] = useState(false);
   const s = events ? stats(events) : null;
@@ -17,7 +17,7 @@ export function CardView({ live, events }: { live: LiveState | null; events: Raw
   const lines = live && m
     ? [
         `Paddock: ${names.join(" and ")}, up to ${cap}, ${m.maxLeverageX100 / 100}× leverage max`,
-        `Guard at ${m.guardHealthBps / 10_000}× maintenance, run every epoch by Somnia Reactivity`,
+        acct.subscriptionId ? `Guard at ${m.guardHealthBps / 10_000}× maintenance, run every epoch by Somnia Reactivity` : `Every order checked on chain by Halter before it reaches dreamDEX`,
       ]
     : ["Reading the paddock from Hideki…", ""];
   const tiles = [
@@ -86,7 +86,7 @@ export function CardView({ live, events }: { live: LiveState | null; events: Raw
             </g>
           ))}
           <text x="72" y="622" fill="#857D70" fontFamily={SANS} fontSize="17">
-            Halter {CURRENT.version} {short(CURRENT.address)} · dreamDEX perps · Somnia Hideki testnet · github.com/nftkingiii/halter
+            {acct.label} · {acct.halterLabel} {short(acct.halter)} · dreamDEX perps · Somnia Hideki testnet · github.com/nftkingiii/halter
           </text>
         </svg>
 

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { LiveState } from "../chain";
 import { usd, notional, baseAmount } from "../chain";
-import { CURRENT, EXPLORER, MARKETS, OWNER, SUBSCRIPTION_ID, DEMO_GUARD_BPS, marketOf, short } from "../config";
+import { EXPLORER, MARKETS, DEMO_GUARD_BPS, marketOf, short, type Account } from "../config";
 import { toRows, type RawEvent } from "../data";
 import { Tape } from "./Tape";
 
@@ -56,8 +56,8 @@ function Dial({ ratio, line }: { ratio: number | null; line: number }) {
   );
 }
 
-export function PaddockView({ live, error, events, status }: {
-  live: LiveState | null; error: string | null; events: RawEvent[] | null; status: { ok: boolean; error?: string };
+export function PaddockView({ acct, live, error, events, status }: {
+  acct: Account; live: LiveState | null; error: string | null; events: RawEvent[] | null; status: { ok: boolean; error?: string };
 }) {
   const m = live?.mandate;
   const expired = !!m && m.expiresAt !== 0 && m.expiresAt * 1000 < Date.now();
@@ -65,8 +65,8 @@ export function PaddockView({ live, error, events, status }: {
   const ratio = live && live.mmReq > 0n ? Number((live.equity * 10_000n) / live.mmReq) / 10_000 : null;
   const inside = new Set(live?.markets.map((x) => x.pool.toLowerCase()) ?? []);
   const names = live?.markets.map((x) => marketOf(x.pool)) ?? [];
-  const lastCheck = events?.filter((e) => e.name === "GuardChecked" && e.version === CURRENT.version).at(-1);
-  const recent = useMemo(() => (events ? toRows(events).slice(0, 5) : []), [events]);
+  const lastCheck = events?.filter((e) => e.name === "GuardChecked" && e.halter.toLowerCase() === acct.halter.toLowerCase()).at(-1);
+  const recent = useMemo(() => (events ? toRows(events, acct).slice(0, 5) : []), [events, acct]);
   const outside = Object.keys(MARKETS).length - inside.size;
 
   return (
@@ -82,19 +82,20 @@ export function PaddockView({ live, error, events, status }: {
           <div className="readouts">
             <div><div className="eng dim">Equity</div><div className={`v num ${live ? "" : "skeleton"}`}>{live ? usd(live.equity) : "$000.00"}</div></div>
             <div><div className="eng dim">Maintenance</div><div className={`v num ${live ? "" : "skeleton"}`}>{live ? usd(live.mmReq) : "$0.00"}</div></div>
-            <div><div className="eng dim">Reactivity sub</div><div className="v clay num">{SUBSCRIPTION_ID}</div></div>
+            <div><div className="eng dim">Reactivity sub</div><div className={`v num ${acct.subscriptionId ? "clay" : "dim"}`}>{acct.subscriptionId ?? "not yet"}</div></div>
           </div>
           <p className="note">
             {ratio === null ? "No open position, so there's nothing for the guard to cut. " : ""}
-            Every epoch (~5 min) the chain itself calls Halter; below the guard line it cuts the position by {m ? m.guardReduceBps / 100 : "…"}%.
-            {lastCheck ? ` Last check ${ago(lastCheck.time)}, epoch ${lastCheck.args.epoch}.` : ""}
+            {acct.subscriptionId
+              ? <>Every epoch (~5 min) the chain itself calls Halter; below the guard line it cuts the position by {m ? m.guardReduceBps / 100 : "…"}%.{lastCheck ? ` Last check ${ago(lastCheck.time)}, epoch ${lastCheck.args.epoch}.` : ""}</>
+              : <>This account's guard isn't subscribed to Somnia Reactivity yet, so nothing cuts a position on its own; the paddock still checks every order.</>}
           </p>
         </section>
 
         <section className="plate" aria-labelledby="h-paddock">
           <span className="screw l">+</span><span className="screw r">+</span>
           <div className="plate-head">
-            <span className="eng" id="h-paddock">Paddock · Halter {CURRENT.version}</span>
+            <span className="eng" id="h-paddock">Paddock · {acct.label} · {acct.halterLabel}</span>
             <span className={`tag ${!live ? "owner" : live.revoked || expired ? "block" : "ok"}`}>
               {!live ? "Reading" : live.revoked ? "Revoked" : expired ? "Expired" : "Agent trading"}
             </span>
@@ -131,8 +132,10 @@ export function PaddockView({ live, error, events, status }: {
             ))}
           </div>
           <p className="note">
-            Linking a bot on dreamDEX opens all {Object.keys(MARKETS).length} markets. Halter narrows it to these, each checked against dreamDEX's pool factory, for account{" "}
-            <a className="mono" href={`${EXPLORER}/address/${OWNER}`} target="_blank" rel="noreferrer">{short(OWNER)}</a>.
+            Linking a bot on dreamDEX opens all {Object.keys(MARKETS).length} markets. Halter narrows it to these, each checked against dreamDEX's pool factory, for{" "}
+            <a className="mono" href={`${EXPLORER}/address/${acct.owner}`} target="_blank" rel="noreferrer">{short(acct.owner)}</a> through{" "}
+            <a className="mono" href={`${EXPLORER}/address/${acct.halter}`} target="_blank" rel="noreferrer">{short(acct.halter)}</a>
+            {acct.id === "wallet1" ? ", an operator address nobody holds a key for (EIP-7702)." : "."}
           </p>
         </section>
       </div>

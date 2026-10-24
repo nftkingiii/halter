@@ -19,6 +19,7 @@ const STEP = 1000n; // node limit
 const CONCURRENCY = 8;
 
 const HALTERS = [
+  { version: "keyless", address: "0xb4Ae094b053B2E6B1E572281d245368D8269E55b", deployBlock: 29507000n },
   { version: "v2", address: "0xc904a9ac96bfda2989ead531bc57fd8d5ee56b06", deployBlock: 29119837n },
   { version: "v1", address: "0x24bd6b71f27c7aad65fb9842c6181b65b571a833", deployBlock: 29099189n },
 ];
@@ -31,6 +32,8 @@ const file = join(DATA, "events.json");
 const state = existsSync(file)
   ? JSON.parse(readFileSync(file, "utf8"))
   : { scanned: Object.fromEntries(HALTERS.map((h) => [h.address, String(h.deployBlock - 1n)])), events: [] };
+// A Halter added after the state was saved starts from its own deploy block.
+for (const h of HALTERS) state.scanned[h.address] ??= String(h.deployBlock - 1n);
 const seen = new Set(state.events.map((e) => `${e.tx}:${e.logIndex}`));
 const blockTime = new Map();
 let head = 0n;
