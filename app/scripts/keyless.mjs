@@ -13,7 +13,8 @@
 //   DEPLOY=keyless node scripts/keyless.mjs status                  read-only
 //   DEPLOY=keyless node scripts/keyless.mjs activate                install code + initialise (after linking)
 //   DEPLOY=keyless node scripts/keyless.mjs setup                   paddock, agent (admin key)
-import { keccak256, toBytes, toHex, concat, numberToHex, parseEther, formatEther } from "viem";
+//   DEPLOY=keyless node scripts/keyless.mjs subscribe               guard on Somnia Reactivity (admin key pays)
+import { keccak256, toBytes, toHex, concat, numberToHex, parseEther, formatEther, parseAbi, toFunctionSelector, parseEventLogs } from "viem";
 import { hashAuthorization, recoverAuthorizationAddress } from "viem/utils";
 import { ADDR, POOLS, SEL, pub, owner, agent, wallet, halterArtifact, poolAbi, bankAbi, loadDeployment, saveDeployment, send } from "./lib.mjs";
 
@@ -124,6 +125,37 @@ if (mode === "setup") {
   await send(dep, "allow agent key", owner, { address: H, abi, functionName: "setAgent", args: [agent.address, true] });
   const eq = await pub.readContract({ address: ADDR.marginBank, abi: bankAbi, functionName: "getAccountEquity", args: [dep.owner] });
   console.log(`  account ${dep.owner} perps equity ${formatEther(eq)}`);
+}
+
+if (mode === "subscribe") {
+  // The chain calls the operator's onEvent each EpochTick; the delegated code runs the guard.
+  const H = dep.keyless?.authority;
+  if (!H || !(await pub.getCode({ address: H }))) throw new Error("activate first");
+  if (dep.subscriptionId) throw new Error(`already subscribed: ${dep.subscriptionId}`);
+  const PRECOMPILE = "0x0000000000000000000000000000000000000100";
+  const rxAbi = parseAbi([
+    "function subscribe((bytes32[4] eventTopics, address origin, address caller, address emitter, address handlerContractAddress, bytes4 handlerFunctionSelector, uint64 priorityFeePerGas, uint64 maxFeePerGas, uint64 gasLimit, bool isGuaranteed, bool isCoalesced) subscriptionData) returns (uint256)",
+    "event SubscriptionCreated(uint256 indexed subscriptionId, address indexed owner, (bytes32[4] eventTopics, address origin, address caller, address emitter, address handlerContractAddress, bytes4 handlerFunctionSelector, uint64 priorityFeePerGas, uint64 maxFeePerGas, uint64 gasLimit, bool isGuaranteed, bool isCoalesced) subscriptionData)",
+  ]);
+  const zero = "0x0000000000000000000000000000000000000000000000000000000000000000";
+  const data = {
+    eventTopics: [keccak256(toBytes("EpochTick(uint64,uint64)")), zero, zero, zero],
+    origin: "0x0000000000000000000000000000000000000000",
+    caller: "0x0000000000000000000000000000000000000000",
+    emitter: PRECOMPILE,
+    handlerContractAddress: H,
+    handlerFunctionSelector: toFunctionSelector("onEvent(address,bytes32[],bytes)"),
+    priorityFeePerGas: 1_000_000_000n,
+    maxFeePerGas: 0n,
+    gasLimit: 10_000_000n,
+    isGuaranteed: false,
+    isCoalesced: false,
+  };
+  const r = await send(dep, "subscribe keyless operator to EpochTick", owner, { address: PRECOMPILE, abi: rxAbi, functionName: "subscribe", args: [data] });
+  const created = parseEventLogs({ abi: rxAbi, logs: r.logs, eventName: "SubscriptionCreated" })[0];
+  dep.subscriptionId = created ? created.args.subscriptionId.toString() : "unknown (no SubscriptionCreated log)";
+  saveDeployment(dep);
+  console.log(`  subscription id ${dep.subscriptionId}`);
 }
 
 await status();
