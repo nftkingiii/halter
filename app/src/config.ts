@@ -32,7 +32,7 @@ export const ACCOUNTS: Account[] = [
     halter: "0xb4Ae094b053B2E6B1E572281d245368D8269E55b",
     halterLabel: "keyless operator",
     versions: ["keyless"],
-    subscriptionId: null,
+    subscriptionId: "17779455",
     admin: ADMIN_KEY,
   },
   {

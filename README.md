@@ -106,7 +106,24 @@ dreamDEX's *Link a Bot* refuses contract addresses ("That address is a contract"
 | Activate: type-4 transaction with the keyless authorization, calling `initialize` | code `0xef0100…4113`, `initialized = true` | [0x6553036a…](https://explorer.testnet.somnia.network/tokyo/tx/0x6553036aa9cf628a6d1950ab91fd32b9dcfd731ada069fc200897a5377e5d8ff) |
 | Admin narrows it to the paddock: BTC and ETH at $60, 2×, $25/day, 30 days; agent allowed | `PoolSet`, `MandateSet`, `AgentSet` | in [`deployments/hideki-keyless.json`](deployments/hideki-keyless.json) |
 
-Read back through the keyless address: a SOL order is refused with `PoolNotAllowed` and a non-agent caller with `NotAgent`. A BTC order returns `LeverageCap` because Wallet 1 has no margin yet; it becomes tradable when the wallet's Perps Arena paper USDso arrive.
+| Subscribe the keyless operator's guard to Somnia Reactivity | subscription `17779455` on `EpochTick` | [0xdefd7fa2…](https://explorer.testnet.somnia.network/tokyo/tx/0xdefd7fa2a162293b373dbb77cab2b0c69898fa2cc6600ba95cf32fb8ea726b95) |
+| **The chain calls Halter's code at the keyless address**, epoch 10544 | `GuardChecked(10544, 0)`: Wallet 1 healthy, nothing cut. A system transaction (nonce 530,747,211,382,785, `r = 0x1`) calling `onEvent` | [0x00bebe2b…](https://explorer.testnet.somnia.network/tokyo/tx/0x00bebe2b7347ef74c2caac25d320f309ad1289a6e0e9305d5ba35ff4da00e4c6) |
+
+Read back through the keyless address: a SOL order is refused with `PoolNotAllowed` and a non-agent caller with `NotAgent`.
+
+### The AI agent trading Wallet 1
+
+Once Wallet 1's Perps Arena paper USDso (1,000) arrived, the agent ran on it through the keyless operator with a small, explicit rule: open one 15–25 USD position when its last three recorded mid-prices trend clearly, and close at about +1% / −1% or when the trend turns. Halter enforces the paddock on chain either way.
+
+| | |
+|---|---|
+| Decision cycles on Wallet 1 (to 2026-10-24 04:30 UTC) | 54, of which 16 placed orders |
+| Orders placed through Halter | 21 (BTC and ETH, long and short, opens and closes) |
+| Model cost | about $1.00 in total |
+| First order of its own | BTC long, $20, 2026-10-23 16:11 UTC, [0xa9e1debd…](https://explorer.testnet.somnia.network/tokyo/tx/0xa9e1debdcac2e824b13a92ff96ac1a77a85233959297f7507a2266ddb52003b4): agent key → keyless operator → dreamDEX BTC pool and MarginBank. Log: [`wallet1-first-order.json`](evidence/agent-runs/2026-10-23-wallet1-first-order.json) |
+| A take-profit | ETH short closed at about +1.17% against mid, 23:01 UTC, [0xc8a8a8d3…](https://explorer.testnet.somnia.network/tokyo/tx/0xc8a8a8d35a387948229403d6a706e3ecf49470d164ef4a037b4c651d7ed746ab). Log: [`wallet1-eth-take-profit.json`](evidence/agent-runs/2026-10-23-wallet1-eth-take-profit.json) |
+
+Wallet 1's equity stayed close to its starting 1,000 USDso. These are testnet paper funds, and the point is the control loop, not the strategy. In the first day's logs the agent called the price limit it sent with each market order its "fill price"; the tool now returns `limit_price` and the real entry appears in `read_paddock` the next cycle.
 
 ### Evidence by kind
 
@@ -121,9 +138,10 @@ Read back through the keyless address: a SOL order is refused with `PoolNotAllow
 | Over-leverage, look-alike pool, stranger and expired orders are blocked; a pair with a blocked leg places neither leg; `onEvent` rejects any caller but `0x0100` | `contracts/test/HalterFork.t.sol`, 22/22 passing | fork of live Hideki state |
 | A real dreamDEX app wallet links a Halter operator through the dreamDEX app | keyless rows 2–3 | **live testnet** |
 | The keyless operator has Halter's code and enforces the paddock for the app wallet | keyless rows 3–4, read-back checks | **live testnet** |
+| Somnia Reactivity calls Halter's code at an address nobody holds a key for | keyless row 6 | **live testnet** |
+| The AI agent places and closes orders of its own on a real dreamDEX app wallet, through Halter | Wallet 1 agent table | **live testnet** |
 | The guard fires on a real 1.5× breach caused by the market | not observed | pending |
-| An order the AI agent decided to place on its own | not yet: it has stayed flat so far | pending |
-| Orders through the keyless operator for the app wallet | waits for the wallet's Arena paper USDso | pending |
+
 
 ## The app
 

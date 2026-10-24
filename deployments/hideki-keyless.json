@@ -36,6 +36,12 @@
       "hash": "0x2d77346f2038b28ad9f988f764050392975099f52fa862590bdb11525fa46b92",
       "block": 29510752,
       "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
+    },
+    {
+      "label": "subscribe keyless operator to EpochTick",
+      "hash": "0xdefd7fa2a162293b373dbb77cab2b0c69898fa2cc6600ba95cf32fb8ea726b95",
+      "block": 31632802,
+      "from": "0xa7770b44A07f3a931Cb30Ae2601a52d01f16b580"
     }
   ],
   "implementation": "0x5a186a5b9e4c671d91f72ebb91c541e69ba24113",
@@ -75,5 +81,6 @@
     ],
     "grants": "placeOrderFor, cancelOrderFor, reduceOrderFor on all 21 perp pools (read back 2026-10-21)"
   },
-  "note": "Wallet 1 is a dreamDEX app wallet (smart-contract wallet). The keyless operator was linked while codeless, then activated by EIP-7702. Wallet 1 had no margin at activation, so checks return LeverageCap until its Arena paper USDso arrive."
+  "note": "Wallet 1 is a dreamDEX app wallet (smart-contract wallet). The keyless operator was linked while codeless, then activated by EIP-7702. Wallet 1 had no margin at activation, so checks return LeverageCap until its Arena paper USDso arrive.",
+  "subscriptionId": "17779455"
 }
